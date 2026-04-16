@@ -20,8 +20,11 @@
         students: 'importscore.students.v1',
         recent: 'importscore.recent-files.v1',
         fileName: 'importscore.file-name.v1',
+        currentMaDE: 'importscore.current-made.v1',
         ui: 'importscore.ui.v1'
     };
+
+    const ALLOWED_CHART_TYPES = new Set(['bar', 'line', 'doughnut']);
 
     const DEFAULT_CONFIG = {
         soCauToiDa: 40,
@@ -48,6 +51,7 @@
         redoStack: [],
         maxHistory: 50,
         cloudBusy: false,
+        currentMaDE: (localStorage.getItem(STORAGE_KEYS.currentMaDE) || '').trim(),
         config: loadJson(STORAGE_KEYS.config, DEFAULT_CONFIG),
         proxyUrl: RUNTIME_PROXY_URL || localStorage.getItem(STORAGE_KEYS.proxy) || '',
         currentFileName: localStorage.getItem(STORAGE_KEYS.fileName) || '',
@@ -105,6 +109,7 @@
         dom.chartSection = byId('chartSection');
         dom.scoreChart = byId('scoreChart');
         dom.chartAvgBadge = byId('chartAvgBadge');
+        dom.chartTypeSelect = byId('chartTypeSelect');
 
         dom.modalImport = byId('modalImport');
         dom.dropZone = byId('dropZone');
@@ -149,6 +154,7 @@
 
         dom.btnUndo = byId('btnUndo');
         dom.btnRedo = byId('btnRedo');
+        dom.currentMaDESelect = byId('currentMaDESelect');
     }
 
     function bindEvents() {
@@ -167,6 +173,20 @@
 
         dom.btnUndo.addEventListener('click', undoChange);
         dom.btnRedo.addEventListener('click', redoChange);
+        dom.chartTypeSelect.addEventListener('change', () => {
+            const chartType = ALLOWED_CHART_TYPES.has(dom.chartTypeSelect.value)
+                ? dom.chartTypeSelect.value
+                : 'bar';
+            state.ui.chartType = chartType;
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+            renderChartIfVisible();
+        });
+        dom.currentMaDESelect.addEventListener('change', () => {
+            state.currentMaDE = dom.currentMaDESelect.value.trim();
+            localStorage.setItem(STORAGE_KEYS.currentMaDE, state.currentMaDE);
+            const valueLabel = state.currentMaDE || 'Không có';
+            showToast(`Đã chọn mã đề hiện hành: ${valueLabel}`, 'info');
+        });
 
         document.querySelectorAll('.fcl').forEach((button) => {
             button.addEventListener('click', () => {
@@ -215,12 +235,18 @@
             dom.appBody.classList.add('sidebar-collapsed');
         }
 
+        if (!ALLOWED_CHART_TYPES.has(state.ui.chartType)) {
+            state.ui.chartType = 'bar';
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        }
+
         dom.cfgSoCauToiDa.value = String(state.config.soCauToiDa);
         dom.cfgDanhSachMaDE.value = state.config.danhSachMaDE.join(',');
         dom.cfgTenCotHS.value = state.config.tenCotHS;
         dom.cfgProxyUrl.value = state.proxyUrl;
+        dom.chartTypeSelect.value = state.ui.chartType;
 
-        rebuildStudentMaDEOptions();
+        rebuildMaDEOptions();
         renderRecentFiles();
         updateUndoRedoState();
     }
@@ -250,7 +276,7 @@
             const xepLoai = getRank(score);
             const rowRankClass = getRowRankClass(score);
             const badgeClass = getBadgeClass(score);
-            const maDeOptions = buildMaDeSelectOptions(student.maDe || '');
+            const maDeText = student.maDe ? escapeHtml(student.maDe) : '—';
 
             return `
                 <tr data-student-id="${escapeAttr(student.id)}" class="${rowRankClass} ${state.selectedStudentId === student.id ? 'row-active' : ''}">
@@ -259,7 +285,7 @@
                         <input class="cell-input" data-field="name" value="${escapeAttr(student.name)}" placeholder="Họ và tên">
                     </td>
                     <td class="made-col ${state.showMaDE ? '' : 'hidden'}">
-                        <select class="cell-input" data-field="maDe">${maDeOptions}</select>
+                        <span class="made-pill">${maDeText}</span>
                     </td>
                     <td>
                         <input class="cell-input" data-field="socau" type="number" min="0" max="${state.config.soCauToiDa}" value="${escapeAttr(soCau)}" placeholder="Số câu">
@@ -404,19 +430,25 @@
         if (field === 'name') {
             student.name = input.value.trimStart();
         }
-        if (field === 'maDe') {
-            student.maDe = input.value.trim();
-        }
         if (field === 'socau') {
             student.socau = parseNullableNumber(input.value);
             if (Number.isFinite(student.socau)) {
                 student.socau = clamp(student.socau, 0, state.config.soCauToiDa);
+                student.maDe = state.currentMaDE;
             }
         }
         if (field === 'diem') {
             student.diem = parseNullableNumber(input.value);
             if (Number.isFinite(student.diem)) {
                 student.diem = clamp(student.diem, 0, 10);
+                student.maDe = state.currentMaDE;
+            }
+        }
+
+        if (field === 'socau' || field === 'diem') {
+            const maDeCell = row.querySelector('.made-pill');
+            if (maDeCell) {
+                maDeCell.textContent = student.maDe || '—';
             }
         }
 
@@ -450,6 +482,12 @@
 
                 if (Number.isFinite(student.socau)) {
                     student.diem = clamp(student.socau * getAutoDiemMoiCau(), 0, 10);
+                    student.maDe = state.currentMaDE;
+                }
+
+                const maDeCell = row.querySelector('.made-pill');
+                if (maDeCell) {
+                    maDeCell.textContent = student.maDe || '—';
                 }
 
                 persistStudents(false);
@@ -991,7 +1029,7 @@
     function openStudentModal(index) {
         state.selectedIndex = index;
 
-        rebuildStudentMaDEOptions();
+        rebuildMaDEOptions();
 
         if (index >= 0) {
             const s = state.students[index];
@@ -1085,6 +1123,21 @@
                 event.preventDefault();
                 redoChange();
             }
+
+            if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && event.key.toLowerCase() === 'x') {
+                const activeElement = document.activeElement;
+                const isTypingContext = activeElement instanceof HTMLInputElement
+                    || activeElement instanceof HTMLTextAreaElement
+                    || activeElement instanceof HTMLSelectElement
+                    || (activeElement instanceof HTMLElement && activeElement.isContentEditable);
+
+                if (isTypingContext) return;
+                event.preventDefault();
+                state.currentMaDE = '';
+                dom.currentMaDESelect.value = '';
+                localStorage.setItem(STORAGE_KEYS.currentMaDE, state.currentMaDE);
+                showToast('Đã xóa mã đề hiện hành', 'info');
+            }
         });
     }
 
@@ -1102,7 +1155,7 @@
         };
 
         localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(state.config));
-        rebuildStudentMaDEOptions();
+        rebuildMaDEOptions();
         renderTableAndStats();
         showToast('Đã lưu cấu hình bài thi', 'success');
     }
@@ -1113,10 +1166,18 @@
         showToast('Đã lưu cấu hình cloud', 'success');
     }
 
-    function rebuildStudentMaDEOptions() {
+    function rebuildMaDEOptions() {
+        const values = state.config.danhSachMaDE.slice();
+        if (state.currentMaDE && !values.includes(state.currentMaDE)) {
+            values.push(state.currentMaDE);
+        }
+
         const options = ['<option value="">— Không có —</option>']
-            .concat(state.config.danhSachMaDE.map((ma) => `<option value="${escapeAttr(ma)}">${escapeHtml(ma)}</option>`));
+            .concat(values.map((ma) => `<option value="${escapeAttr(ma)}">${escapeHtml(ma)}</option>`));
+
         dom.stuMaDE.innerHTML = options.join('');
+        dom.currentMaDESelect.innerHTML = options.join('');
+        dom.currentMaDESelect.value = state.currentMaDE;
     }
 
     function toggleSidebar() {
@@ -1144,6 +1205,7 @@
     function renderChart() {
         if (!window.Chart) return;
         const scores = state.students.map(getStudentScore).filter(Number.isFinite);
+        const chartType = ALLOWED_CHART_TYPES.has(state.ui.chartType) ? state.ui.chartType : 'bar';
 
         const buckets = {
             '0-4.9': 0,
@@ -1166,22 +1228,76 @@
             state.chart.destroy();
         }
 
+        const labels = Object.keys(buckets);
+        const values = Object.values(buckets);
+        const palette = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981'];
+        const isCircularChart = chartType === 'doughnut';
+
+        const dataset = {
+            label: 'Số HS theo mức điểm',
+            data: values
+        };
+
+        if (chartType === 'line') {
+            dataset.borderColor = '#60a5fa';
+            dataset.backgroundColor = 'rgba(96, 165, 250, 0.25)';
+            dataset.borderWidth = 2;
+            dataset.fill = true;
+            dataset.tension = 0.35;
+            dataset.pointRadius = 4;
+            dataset.pointHoverRadius = 5;
+            dataset.pointBackgroundColor = '#c7d2fe';
+        } else {
+            dataset.backgroundColor = palette;
+            dataset.borderColor = chartType === 'bar' ? 'rgba(255,255,255,0.15)' : '#12122b';
+            dataset.borderWidth = chartType === 'bar' ? 1 : 2;
+        }
+
         state.chart = new Chart(dom.scoreChart, {
-            type: 'bar',
+            type: chartType,
             data: {
-                labels: Object.keys(buckets),
-                datasets: [{
-                    label: 'Số học sinh',
-                    data: Object.values(buckets),
-                    backgroundColor: ['#ef4444', '#3b82f6', '#f59e0b', '#10b981']
-                }]
+                labels,
+                datasets: [dataset]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 } }
-                }
+                plugins: {
+                    legend: {
+                        display: isCircularChart,
+                        position: 'bottom',
+                        labels: {
+                            color: '#94a3b8',
+                            boxWidth: 12,
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label(context) {
+                                const count = Number(context.raw) || 0;
+                                return ` ${count} học sinh`;
+                            }
+                        }
+                    }
+                },
+                scales: isCircularChart
+                    ? {}
+                    : {
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                color: '#94a3b8'
+                            },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        }
+                    }
             }
         });
     }
@@ -1314,22 +1430,6 @@
         return 'badge-weak';
     }
 
-    function buildMaDeSelectOptions(currentValue) {
-        const current = String(currentValue || '').trim();
-        const values = state.config.danhSachMaDE.slice();
-        if (current && !values.includes(current)) {
-            values.push(current);
-        }
-
-        const html = ['<option value="">— Không có —</option>']
-            .concat(values.map((ma) => `<option value="${escapeAttr(ma)}">${escapeHtml(ma)}</option>`));
-
-        return html.map((item) => {
-            if (!current) return item;
-            return item.replace(`value="${escapeAttr(current)}"`, `value="${escapeAttr(current)}" selected`);
-        }).join('');
-    }
-
     function normalizeStudent(input) {
         return {
             id: input.id || makeId(),
@@ -1443,13 +1543,24 @@
     function showToast(message, type) {
         if (!dom.toastContainer) return;
         const toast = document.createElement('div');
-        toast.className = `toast toast-${type || 'info'}`;
-        toast.textContent = message;
+        const toastType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+        const iconMap = {
+            success: '✓',
+            error: '✕',
+            warning: '!',
+            info: 'i'
+        };
+
+        toast.className = `toast toast-${toastType}`;
+        toast.innerHTML = `
+            <span class="toast-icon" aria-hidden="true">${iconMap[toastType]}</span>
+            <span class="toast-msg">${escapeHtml(message)}</span>
+        `;
         dom.toastContainer.appendChild(toast);
         setTimeout(() => {
             toast.classList.add('toast-out');
-            setTimeout(() => toast.remove(), 180);
-        }, 2200);
+            setTimeout(() => toast.remove(), 220);
+        }, 2800);
     }
 
     function findStudentByRow(row) {

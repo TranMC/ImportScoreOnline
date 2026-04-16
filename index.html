@@ -73,11 +73,17 @@
 
     <div class="header-actions">
         <button class="btn btn-ghost btn-icon" id="btnUndo" title="Hoàn tác (Ctrl+Z)" disabled>
-            <span class="btn-svg">↩</span>
+            <span class="btn-svg">↩ Undo</span>
         </button>
         <button class="btn btn-ghost btn-icon" id="btnRedo" title="Làm lại" disabled>
-            <span class="btn-svg">↪</span>
+            <span class="btn-svg">↪ Redo</span>
         </button>
+        <div class="header-made" title="Mã đề sẽ được gán tự động khi nhập số câu hoặc điểm">
+            <span class="header-made-label">Mã đề</span>
+            <select id="currentMaDESelect" class="header-made-select">
+                <option value="">— Không có —</option>
+            </select>
+        </div>
         <button class="btn btn-secondary" id="btnImport">
             <span>📂</span> Import Excel
         </button>
@@ -175,7 +181,7 @@
                     <div class="shortcut"><kbd>Ctrl+Z</kbd><span>Hoàn tác</span></div>
                     <div class="shortcut"><kbd>Enter</kbd><span>Số câu → Điểm, Điểm → Dòng kế</span></div>
                     <div class="shortcut"><kbd>↑ / ↓</kbd><span>Di chuyển hàng</span></div>
-                    <div class="shortcut"><kbd>x</kbd><span>Xóa mã đề</span></div>
+                    <div class="shortcut"><kbd>x</kbd><span>Xóa mã đề hiện hành</span></div>
                 </div>
             </div>
 
@@ -256,6 +262,11 @@
             <div class="chart-hdr">
                 <h3>📊 Phân phối điểm số</h3>
                 <div class="chart-hdr-right">
+                    <select id="chartTypeSelect" class="chart-type-select" title="Chọn loại biểu đồ">
+                        <option value="bar">Cột</option>
+                        <option value="line">Đường</option>
+                        <option value="doughnut">Vòng tròn</option>
+                    </select>
                     <span class="chart-avg-badge" id="chartAvgBadge"></span>
                     <button class="btn btn-ghost btn-sm" id="btnCloseChart">✕ Đóng</button>
                 </div>
