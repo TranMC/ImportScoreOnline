@@ -25,9 +25,11 @@
     };
 
     const ALLOWED_CHART_TYPES = new Set(['bar', 'line', 'doughnut']);
+    const ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS = new Set(['none', 'socau', 'made']);
 
     const DEFAULT_CONFIG = {
         soCauToiDa: 40,
+        diemToiDa: 10,
         danhSachMaDE: ['701', '702', '703', '704'],
         tenCotHS: 'Họ và tên'
     };
@@ -51,6 +53,12 @@
         redoStack: [],
         maxHistory: 50,
         cloudBusy: false,
+        chartDrag: {
+            active: false,
+            pointerId: null,
+            offsetX: 0,
+            offsetY: 0
+        },
         currentMaDE: (localStorage.getItem(STORAGE_KEYS.currentMaDE) || '').trim(),
         config: loadJson(STORAGE_KEYS.config, DEFAULT_CONFIG),
         proxyUrl: RUNTIME_PROXY_URL || localStorage.getItem(STORAGE_KEYS.proxy) || '',
@@ -90,8 +98,10 @@
         dom.appBody = byId('appBody');
 
         dom.cfgSoCauToiDa = byId('cfgSoCauToiDa');
+        dom.cfgDiemToiDa = byId('cfgDiemToiDa');
         dom.cfgDanhSachMaDE = byId('cfgDanhSachMaDE');
         dom.cfgTenCotHS = byId('cfgTenCotHS');
+        dom.cfgSearchSingleFocusTarget = byId('cfgSearchSingleFocusTarget');
         dom.cfgProxyUrl = byId('cfgProxyUrl');
 
         dom.recentFilesList = byId('recentFilesList');
@@ -107,6 +117,7 @@
         dom.thMaDE = byId('thMaDE');
 
         dom.chartSection = byId('chartSection');
+        dom.chartDragHandle = byId('chartDragHandle');
         dom.scoreChart = byId('scoreChart');
         dom.chartAvgBadge = byId('chartAvgBadge');
         dom.chartTypeSelect = byId('chartTypeSelect');
@@ -187,6 +198,13 @@
             const valueLabel = state.currentMaDE || 'Không có';
             showToast(`Đã chọn mã đề hiện hành: ${valueLabel}`, 'info');
         });
+        dom.cfgSearchSingleFocusTarget.addEventListener('change', () => {
+            const nextTarget = ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS.has(dom.cfgSearchSingleFocusTarget.value)
+                ? dom.cfgSearchSingleFocusTarget.value
+                : 'none';
+            state.ui.searchSingleFocusTarget = nextTarget;
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        });
 
         document.querySelectorAll('.fcl').forEach((button) => {
             button.addEventListener('click', () => {
@@ -219,6 +237,7 @@
         bindExportModalEvents();
         bindStudentModalEvents();
         bindGenericModalEvents();
+        bindChartDragEvents();
         bindKeyboardShortcuts();
     }
 
@@ -240,12 +259,34 @@
             localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
         }
 
+        // Migrate legacy boolean setting to new explicit focus target mode.
+        if (typeof state.ui.autoFocusSingleResult === 'boolean') {
+            state.ui.searchSingleFocusTarget = state.ui.autoFocusSingleResult ? 'socau' : 'none';
+            delete state.ui.autoFocusSingleResult;
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        }
+
+        if (!ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS.has(state.ui.searchSingleFocusTarget)) {
+            state.ui.searchSingleFocusTarget = 'none';
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        }
+
+        if (!state.ui.chartPosition
+            || !Number.isFinite(state.ui.chartPosition.left)
+            || !Number.isFinite(state.ui.chartPosition.top)) {
+            state.ui.chartPosition = null;
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        }
+
         dom.cfgSoCauToiDa.value = String(state.config.soCauToiDa);
+        dom.cfgDiemToiDa.value = String(state.config.diemToiDa);
         dom.cfgDanhSachMaDE.value = state.config.danhSachMaDE.join(',');
         dom.cfgTenCotHS.value = state.config.tenCotHS;
+        dom.cfgSearchSingleFocusTarget.value = state.ui.searchSingleFocusTarget;
         dom.cfgProxyUrl.value = state.proxyUrl;
         dom.chartTypeSelect.value = state.ui.chartType;
 
+        applySavedChartPosition();
         rebuildMaDEOptions();
         renderRecentFiles();
         updateUndoRedoState();
@@ -363,9 +404,20 @@
             if (state.searchText && rows.length === 1) {
                 state.selectedStudentId = rows[0].id;
                 renderTableAndStats();
-                focusDirectInputForStudent(rows[0].id);
+                const selectedRow = dom.tableBody.querySelector(`tr[data-student-id="${CSS.escape(rows[0].id)}"]`);
+                if (selectedRow instanceof HTMLElement) {
+                    selectedRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+
+                if (state.ui.searchSingleFocusTarget === 'socau') {
+                    focusDirectInputForStudent(rows[0].id, 'socau');
+                }
+
+                if (state.ui.searchSingleFocusTarget === 'made') {
+                    focusDirectInputForStudent(rows[0].id, 'diem');
+                }
             }
-        }, 3000);
+        }, 300);
     }
 
     function clearSearch() {
@@ -470,58 +522,38 @@
         if (!row) return;
 
         const field = input.dataset.field;
+        if (field !== 'socau' && field !== 'diem') return;
+
+        event.preventDefault();
+
+        const student = findStudentByRow(row);
+        if (!student) return;
+
         if (field === 'socau') {
-            event.preventDefault();
+            const socau = parseNullableNumber(input.value);
+            student.socau = Number.isFinite(socau)
+                ? clamp(socau, 0, state.config.soCauToiDa)
+                : NaN;
 
-            const student = findStudentByRow(row);
-            if (student) {
-                const socau = parseNullableNumber(input.value);
-                student.socau = Number.isFinite(socau)
-                    ? clamp(socau, 0, state.config.soCauToiDa)
-                    : NaN;
-
-                if (Number.isFinite(student.socau)) {
-                    student.diem = clamp(student.socau * getAutoDiemMoiCau(), 0, 10);
-                    student.maDe = state.currentMaDE;
-                }
-
-                const maDeCell = row.querySelector('.made-pill');
-                if (maDeCell) {
-                    maDeCell.textContent = student.maDe || '—';
-                }
-
-                persistStudents(false);
-                renderHeaderStats();
-                renderProgress();
-                renderChartIfVisible();
-                updateUndoRedoState();
+            if (Number.isFinite(student.socau)) {
+                student.diem = clamp(student.socau * getAutoDiemMoiCau(), 0, 10);
+                student.maDe = state.currentMaDE;
             }
-
-            const diemInput = row.querySelector('input[data-field="diem"]');
-            if (diemInput instanceof HTMLInputElement) {
-                if (student && Number.isFinite(student.diem)) {
-                    diemInput.value = formatScore(student.diem);
-                }
-                diemInput.focus();
-                diemInput.select();
-            }
-            return;
         }
 
         if (field === 'diem') {
-            event.preventDefault();
-            persistStudents();
+            const diem = parseNullableNumber(input.value);
+            student.diem = Number.isFinite(diem)
+                ? clamp(diem, 0, 10)
+                : NaN;
 
-            const currentRow = row;
-            const nextRow = currentRow.nextElementSibling;
-            if (nextRow instanceof HTMLTableRowElement) {
-                const nextDiem = nextRow.querySelector('input[data-field="diem"]');
-                if (nextDiem instanceof HTMLInputElement) {
-                    nextDiem.focus();
-                    nextDiem.select();
-                }
+            if (Number.isFinite(student.diem)) {
+                student.maDe = state.currentMaDE;
             }
         }
+
+        input.blur();
+        persistStudents();
     }
 
     function handleTableClick(event) {
@@ -1143,6 +1175,7 @@
 
     function saveExamConfig() {
         const soCau = clamp(parseInt(dom.cfgSoCauToiDa.value, 10) || DEFAULT_CONFIG.soCauToiDa, 1, 500);
+        const diem = clamp(parseFloat(dom.cfgDiemToiDa.value) || DEFAULT_CONFIG.diemToiDa, 0.5, 1000);
         const danhSach = dom.cfgDanhSachMaDE.value
             .split(',')
             .map((x) => x.trim())
@@ -1150,6 +1183,7 @@
 
         state.config = {
             soCauToiDa: soCau,
+            diemToiDa: diem,
             danhSachMaDE: danhSach,
             tenCotHS: dom.cfgTenCotHS.value.trim() || DEFAULT_CONFIG.tenCotHS
         };
@@ -1157,7 +1191,9 @@
         localStorage.setItem(STORAGE_KEYS.config, JSON.stringify(state.config));
         rebuildMaDEOptions();
         renderTableAndStats();
-        showToast('Đã lưu cấu hình bài thi', 'success');
+        
+        const pointPerQuestion = (diem / soCau).toFixed(2);
+        showToast(`Đã lưu cấu hình bài thi - Mỗi câu ${pointPerQuestion} điểm`, 'success');
     }
 
     function saveCloudConfig() {
@@ -1193,7 +1229,130 @@
 
     function setChartVisible(visible) {
         dom.chartSection.classList.toggle('hidden', !visible);
-        if (visible) renderChart();
+        if (visible) {
+            applySavedChartPosition();
+            renderChart();
+        }
+    }
+
+    function bindChartDragEvents() {
+        if (!dom.chartDragHandle || !dom.chartSection) return;
+
+        dom.chartDragHandle.addEventListener('pointerdown', onChartDragStart);
+        window.addEventListener('pointermove', onChartDragMove);
+        window.addEventListener('pointerup', onChartDragEnd);
+        window.addEventListener('pointercancel', onChartDragEnd);
+        window.addEventListener('resize', () => {
+            if (!state.ui.chartPosition) return;
+            applySavedChartPosition();
+        });
+    }
+
+    function onChartDragStart(event) {
+        if (!(event instanceof PointerEvent)) return;
+        if (event.button !== 0) return;
+        if (event.target instanceof HTMLElement && event.target.closest('button, select, input, option')) return;
+        if (dom.chartSection.classList.contains('hidden')) return;
+
+        const rect = dom.chartSection.getBoundingClientRect();
+        state.chartDrag.active = true;
+        state.chartDrag.pointerId = event.pointerId;
+        state.chartDrag.offsetX = event.clientX - rect.left;
+        state.chartDrag.offsetY = event.clientY - rect.top;
+
+        applyChartPosition(rect.left, rect.top, false);
+        dom.chartSection.classList.add('chart-dragging');
+
+        if (dom.chartDragHandle.setPointerCapture) {
+            try {
+                dom.chartDragHandle.setPointerCapture(event.pointerId);
+            } catch (error) {
+                // Ignore pointer capture errors on unsupported browsers.
+            }
+        }
+
+        event.preventDefault();
+    }
+
+    function onChartDragMove(event) {
+        if (!(event instanceof PointerEvent)) return;
+        if (!state.chartDrag.active) return;
+        if (state.chartDrag.pointerId !== event.pointerId) return;
+
+        const rawLeft = event.clientX - state.chartDrag.offsetX;
+        const rawTop = event.clientY - state.chartDrag.offsetY;
+        const clamped = clampChartCoordinates(rawLeft, rawTop);
+        applyChartPosition(clamped.left, clamped.top, false);
+    }
+
+    function onChartDragEnd(event) {
+        if (!(event instanceof PointerEvent)) return;
+        if (!state.chartDrag.active) return;
+        if (state.chartDrag.pointerId !== event.pointerId) return;
+
+        state.chartDrag.active = false;
+        state.chartDrag.pointerId = null;
+        dom.chartSection.classList.remove('chart-dragging');
+
+        if (dom.chartDragHandle.releasePointerCapture) {
+            try {
+                dom.chartDragHandle.releasePointerCapture(event.pointerId);
+            } catch (error) {
+                // Ignore pointer capture errors on unsupported browsers.
+            }
+        }
+
+        const rect = dom.chartSection.getBoundingClientRect();
+        const clamped = clampChartCoordinates(rect.left, rect.top);
+        applyChartPosition(clamped.left, clamped.top, true);
+    }
+
+    function applySavedChartPosition() {
+        if (!state.ui.chartPosition) {
+            dom.chartSection.style.left = '';
+            dom.chartSection.style.top = '';
+            dom.chartSection.style.right = '';
+            dom.chartSection.style.bottom = '';
+            return;
+        }
+
+        const clamped = clampChartCoordinates(state.ui.chartPosition.left, state.ui.chartPosition.top);
+        applyChartPosition(clamped.left, clamped.top, true);
+    }
+
+    function applyChartPosition(left, top, persist) {
+        dom.chartSection.style.left = `${left}px`;
+        dom.chartSection.style.top = `${top}px`;
+        dom.chartSection.style.right = 'auto';
+        dom.chartSection.style.bottom = 'auto';
+
+        if (!persist) return;
+        state.ui.chartPosition = {
+            left: Math.round(left),
+            top: Math.round(top)
+        };
+        localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+    }
+
+    function clampChartCoordinates(left, top) {
+        const margin = 8;
+        const topBoundary = getChartTopBoundary();
+        const maxLeft = Math.max(margin, window.innerWidth - dom.chartSection.offsetWidth - margin);
+        const maxTop = Math.max(topBoundary, window.innerHeight - dom.chartSection.offsetHeight - margin);
+
+        return {
+            left: clamp(left, margin, maxLeft),
+            top: clamp(top, topBoundary, maxTop)
+        };
+    }
+
+    function getChartTopBoundary() {
+        if (window.innerWidth <= 480) return 8;
+
+        const rootStyles = getComputedStyle(document.documentElement);
+        const headerHeight = parseInt(rootStyles.getPropertyValue('--header-h'), 10) || 60;
+        const progressHeight = parseInt(rootStyles.getPropertyValue('--prog-h'), 10) || 32;
+        return headerHeight + progressHeight + 6;
     }
 
     function renderChartIfVisible() {

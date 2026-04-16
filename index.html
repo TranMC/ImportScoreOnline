@@ -125,6 +125,10 @@
                         <label class="cfg-label">Số câu tối đa</label>
                         <input type="number" id="cfgSoCauToiDa" min="1" max="500" value="40" class="cfg-input">
                     </div>
+                    <div class="cfg-row">
+                        <label class="cfg-label">Điểm tối đa</label>
+                        <input type="number" id="cfgDiemToiDa" min="1" max="100" value="10" class="cfg-input" step="0.5">
+                    </div>
                     <div class="cfg-row cfg-full">
                         <label class="cfg-label">Mã đề (cách nhau dấu phẩy)</label>
                         <input type="text" id="cfgDanhSachMaDE" value="701,702,703,704" class="cfg-input">
@@ -132,6 +136,14 @@
                     <div class="cfg-row cfg-full">
                         <label class="cfg-label">Tên cột HS trong Excel</label>
                         <input type="text" id="cfgTenCotHS" value="Họ và tên" class="cfg-input">
+                    </div>
+                    <div class="cfg-row cfg-full">
+                        <label class="cfg-label">Focus khi tìm còn 1 học sinh</label>
+                        <select id="cfgSearchSingleFocusTarget" class="cfg-input">
+                            <option value="none">Không focus ô nào (chỉ chọn dòng)</option>
+                            <option value="socau">Focus ô Số câu</option>
+                            <option value="diem">Focus ô Điểm</option>
+                        </select>
                     </div>
                     <div class="cfg-row cfg-full">
                         <button class="btn btn-primary btn-sm btn-block" id="btnSaveConfig">💾 Lưu cấu hình</button>
@@ -179,7 +191,7 @@
                     <div class="shortcut"><kbd>Ctrl+G</kbd><span>Nhập số câu trực tiếp</span></div>
                     <div class="shortcut"><kbd>Ctrl+B</kbd><span>Nhập điểm trực tiếp</span></div>
                     <div class="shortcut"><kbd>Ctrl+Z</kbd><span>Hoàn tác</span></div>
-                    <div class="shortcut"><kbd>Enter</kbd><span>Số câu → Điểm, Điểm → Dòng kế</span></div>
+                    <div class="shortcut"><kbd>Enter</kbd><span>Lưu và thoát ô nhập hiện tại</span></div>
                     <div class="shortcut"><kbd>↑ / ↓</kbd><span>Di chuyển hàng</span></div>
                     <div class="shortcut"><kbd>x</kbd><span>Xóa mã đề hiện hành</span></div>
                 </div>
@@ -259,7 +271,7 @@
 
         <!-- Chart Section -->
         <div class="chart-section hidden" id="chartSection">
-            <div class="chart-hdr">
+            <div class="chart-hdr chart-drag-handle" id="chartDragHandle">
                 <h3>📊 Phân phối điểm số</h3>
                 <div class="chart-hdr-right">
                     <select id="chartTypeSelect" class="chart-type-select" title="Chọn loại biểu đồ">

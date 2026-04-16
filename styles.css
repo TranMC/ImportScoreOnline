@@ -883,6 +883,16 @@ kbd {
     margin-bottom: 10px;
 }
 
+.chart-drag-handle {
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+}
+
+.chart-section.chart-dragging .chart-drag-handle {
+    cursor: grabbing;
+}
+
 .chart-hdr h3 {
     font-size: 14px;
     font-weight: 700;
@@ -893,6 +903,11 @@ kbd {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.chart-hdr-right .btn,
+.chart-hdr-right select {
+    cursor: pointer;
 }
 
 .chart-type-select {
@@ -1362,6 +1377,17 @@ kbd {
 .cell-input:hover:not(:focus) {
     background: rgba(255, 255, 255, 0.03);
     border-color: rgba(148, 163, 184, 0.25);
+}
+
+.cell-input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.cell-input[type='number']::-webkit-outer-spin-button,
+.cell-input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .stbl tbody tr:hover .cell-input:not(:focus) {
