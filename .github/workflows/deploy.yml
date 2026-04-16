@@ -2,7 +2,10 @@ name: Create config.js and Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
+    paths:
+      - 'ImportScoreOnline/**'
+      - 'ImportScoreOnline/.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -26,15 +29,16 @@ jobs:
       
       - name: Create config.js from secret
         run: |
-          if [ -z "${{ secrets.PROXY_URL }}" ]; then
-            echo "ERROR: Missing PROXY_URL secret"
-            exit 1
+          PROXY_URL_VALUE="${{ secrets.PROXY_URL }}"
+          if [ -z "$PROXY_URL_VALUE" ]; then
+            PROXY_URL_VALUE="${{ vars.PROXY_URL }}"
           fi
+
           echo "// Auto-generated config from GitHub Secrets" > config.js
           echo "window.APP_CONFIG = {" >> config.js
-          echo "    PROXY_URL: '${{ secrets.PROXY_URL }}'," >> config.js
+          echo "    PROXY_URL: '$PROXY_URL_VALUE'," >> config.js
           echo "};" >> config.js
-          cat config.js
+          echo "config.js generated"
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
