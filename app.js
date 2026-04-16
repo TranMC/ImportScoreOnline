@@ -1,11 +1,18 @@
 (function () {
     'use strict';
 
-    const RUNTIME_PROXY_URL =
-        (window.APP_CONFIG && typeof window.APP_CONFIG.PROXY_URL === 'string'
-            ? window.APP_CONFIG.PROXY_URL
-            : '')
-            .trim();
+    const RUNTIME_PROXY_URL = (() => {
+        if (window.APP_CONFIG && typeof window.APP_CONFIG.PROXY_URL === 'string') {
+            return window.APP_CONFIG.PROXY_URL.trim();
+        }
+
+        // Backward compatibility for older deployments that expose `const CONFIG`.
+        if (typeof CONFIG !== 'undefined' && CONFIG && typeof CONFIG.PROXY_URL === 'string') {
+            return CONFIG.PROXY_URL.trim();
+        }
+
+        return '';
+    })();
 
     const STORAGE_KEYS = {
         config: 'importscore.config.v1',

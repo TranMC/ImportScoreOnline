@@ -26,8 +26,12 @@ jobs:
       
       - name: Create config.js from secret
         run: |
+          if [ -z "${{ secrets.PROXY_URL }}" ]; then
+            echo "ERROR: Missing PROXY_URL secret"
+            exit 1
+          fi
           echo "// Auto-generated config from GitHub Secrets" > config.js
-          echo "const CONFIG = {" >> config.js
+          echo "window.APP_CONFIG = {" >> config.js
           echo "    PROXY_URL: '${{ secrets.PROXY_URL }}'," >> config.js
           echo "};" >> config.js
           cat config.js
