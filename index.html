@@ -134,7 +134,7 @@
             </div>
 
             <!-- Cloud Settings -->
-            <div class="sidebar-section">
+            <div class="sidebar-section hidden">
                 <div class="sidebar-section-hdr">
                     <span>☁️</span>
                     <h3>Cài đặt Database</h3>
@@ -142,7 +142,7 @@
                 <div class="config-form">
                     <div class="cfg-row cfg-full">
                         <label class="cfg-label">Proxy URL (CloudScore API)</label>
-                        <input type="text" id="cfgProxyUrl" value="https://proxyscore.mctran2005.workers.dev" class="cfg-input" placeholder="https://...">
+                        <input type="text" id="cfgProxyUrl" value="" class="cfg-input" placeholder="https://...">
                         <span class="cfg-hint">Để trống = chỉ dùng local</span>
                     </div>
                     <div class="cfg-row cfg-full">
@@ -456,6 +456,7 @@
     </div>
 </div>
 
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

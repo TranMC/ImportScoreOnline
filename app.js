@@ -1,6 +1,12 @@
 (function () {
     'use strict';
 
+    const RUNTIME_PROXY_URL =
+        (window.APP_CONFIG && typeof window.APP_CONFIG.PROXY_URL === 'string'
+            ? window.APP_CONFIG.PROXY_URL
+            : '')
+            .trim();
+
     const STORAGE_KEYS = {
         config: 'importscore.config.v1',
         proxy: 'importscore.proxy.v1',
@@ -36,7 +42,7 @@
         maxHistory: 50,
         cloudBusy: false,
         config: loadJson(STORAGE_KEYS.config, DEFAULT_CONFIG),
-        proxyUrl: localStorage.getItem(STORAGE_KEYS.proxy) || 'https://proxyscore.mctran2005.workers.dev',
+        proxyUrl: RUNTIME_PROXY_URL || localStorage.getItem(STORAGE_KEYS.proxy) || '',
         currentFileName: localStorage.getItem(STORAGE_KEYS.fileName) || '',
         recentFiles: loadJson(STORAGE_KEYS.recent, []),
         ui: loadJson(STORAGE_KEYS.ui, { sidebarCollapsed: false })

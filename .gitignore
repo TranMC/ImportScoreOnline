@@ -5,3 +5,10 @@
 *.swp
 *.swo
 *~
+
+# Local runtime config (contains secrets / private URLs)
+config.js
+.env
+.env.*
+.env
+config.js
