@@ -103,7 +103,10 @@
         dom.previewTableWrap = byId('previewTableWrap');
         dom.sheetSelector = byId('sheetSelector');
         dom.mapNameCol = byId('mapNameCol');
+        dom.mapMaDeCol = byId('mapMaDeCol');
+        dom.mapDiemCol = byId('mapDiemCol');
         dom.mapSkipRows = byId('mapSkipRows');
+        dom.cbClearBeforeImport = byId('cbClearBeforeImport');
         dom.importSummary = byId('importSummary');
         dom.btnDoImport = byId('btnDoImport');
         dom.importCountSpan = byId('importCountSpan');
@@ -232,15 +235,18 @@
             const scoreText = Number.isFinite(score) ? formatScore(score) : '';
             const soCau = Number.isFinite(student.socau) ? String(student.socau) : '';
             const xepLoai = getRank(score);
+            const rowRankClass = getRowRankClass(score);
+            const badgeClass = getBadgeClass(score);
+            const maDeOptions = buildMaDeSelectOptions(student.maDe || '');
 
             return `
-                <tr data-student-id="${escapeAttr(student.id)}" class="${state.selectedStudentId === student.id ? 'row-active' : ''}">
+                <tr data-student-id="${escapeAttr(student.id)}" class="${rowRankClass} ${state.selectedStudentId === student.id ? 'row-active' : ''}">
                     <td>${renderIndex + 1}</td>
                     <td>
                         <input class="cell-input" data-field="name" value="${escapeAttr(student.name)}" placeholder="Họ và tên">
                     </td>
                     <td class="made-col ${state.showMaDE ? '' : 'hidden'}">
-                        <input class="cell-input" data-field="maDe" value="${escapeAttr(student.maDe || '')}" placeholder="Mã đề">
+                        <select class="cell-input" data-field="maDe">${maDeOptions}</select>
                     </td>
                     <td>
                         <input class="cell-input" data-field="socau" type="number" min="0" max="${state.config.soCauToiDa}" value="${escapeAttr(soCau)}" placeholder="Số câu">
@@ -248,7 +254,7 @@
                     <td>
                         <input class="cell-input" data-field="diem" type="number" min="0" max="10" step="0.01" value="${escapeAttr(scoreText)}" placeholder="Điểm">
                     </td>
-                    <td>${xepLoai}</td>
+                    <td><span class="badge ${badgeClass}">${xepLoai}</span></td>
                     <td>
                         <button class="row-btn" data-action="focus-score" title="Nhập nhanh">🎯</button>
                         <button class="row-btn" data-action="delete" title="Xóa">🗑️</button>
@@ -369,7 +375,7 @@
 
     function handleTableInput(event) {
         const input = event.target;
-        if (!(input instanceof HTMLInputElement)) return;
+        if (!(input instanceof HTMLInputElement) && !(input instanceof HTMLSelectElement)) return;
 
         const row = input.closest('tr');
         if (!row) return;
@@ -468,13 +474,19 @@
     }
 
     function handleTableClick(event) {
-        const rowForSelection = event.target.closest('tr[data-student-id]');
-        if (rowForSelection) {
-            state.selectedStudentId = rowForSelection.getAttribute('data-student-id');
-            renderTableAndStats();
+        const target = event.target;
+        const clickedInteractive = target.closest('input, select, button, option, textarea');
+
+        const rowForSelection = target.closest('tr[data-student-id]');
+        if (rowForSelection && !clickedInteractive) {
+            const nextSelectedId = rowForSelection.getAttribute('data-student-id');
+            if (nextSelectedId !== state.selectedStudentId) {
+                state.selectedStudentId = nextSelectedId;
+                renderTableAndStats();
+            }
         }
 
-        const btn = event.target.closest('button[data-action]');
+        const btn = target.closest('button[data-action]');
         if (!btn) return;
 
         const row = btn.closest('tr');
@@ -515,6 +527,8 @@
         byId('btnClearFile').addEventListener('click', clearPendingImport);
         dom.sheetSelector.addEventListener('change', () => buildImportPreview());
         dom.mapNameCol.addEventListener('change', () => buildImportPreview());
+        dom.mapMaDeCol.addEventListener('change', () => buildImportPreview());
+        dom.mapDiemCol.addEventListener('change', () => buildImportPreview());
         dom.mapSkipRows.addEventListener('input', () => buildImportPreview());
         dom.btnDoImport.addEventListener('click', doImportStudents);
 
@@ -574,6 +588,9 @@
         state.pendingSheets = [];
         state.importRows = [];
         dom.fileInput.value = '';
+        if (dom.cbClearBeforeImport) {
+            dom.cbClearBeforeImport.checked = true;
+        }
         dom.fileInfoBar.classList.add('hidden');
         dom.importPreview.classList.add('hidden');
         dom.btnDoImport.classList.add('hidden');
@@ -604,14 +621,39 @@
         const selectedNameIndex = Number.isInteger(currentNameCol)
             ? currentNameCol
             : resolveNameColumnIndex(headerOptions);
+
+        const currentMaDeCol = parseInt(dom.mapMaDeCol.value, 10);
+        const selectedMaDeIndex = Number.isInteger(currentMaDeCol)
+            ? currentMaDeCol
+            : resolveMaDeColumnIndex(headerOptions);
+
+        const currentDiemCol = parseInt(dom.mapDiemCol.value, 10);
+        const selectedDiemIndex = Number.isInteger(currentDiemCol)
+            ? currentDiemCol
+            : resolveScoreColumnIndex(headerOptions);
+
         dom.mapNameCol.innerHTML = headerOptions
             .map((item) => `
                 <option value="${item.idx}" ${item.idx === selectedNameIndex ? 'selected' : ''}>${escapeHtml(item.name)}</option>
             `)
             .join('');
 
+        dom.mapMaDeCol.innerHTML = ['<option value="-1">— Không có mã đề —</option>']
+            .concat(headerOptions.map((item) => `
+                <option value="${item.idx}" ${item.idx === selectedMaDeIndex ? 'selected' : ''}>${escapeHtml(item.name)}</option>
+            `))
+            .join('');
+
+        dom.mapDiemCol.innerHTML = ['<option value="-1">— Không import điểm —</option>']
+            .concat(headerOptions.map((item) => `
+                <option value="${item.idx}" ${item.idx === selectedDiemIndex ? 'selected' : ''}>${escapeHtml(item.name)}</option>
+            `))
+            .join('');
+
         const skipRows = clamp(parseInt(dom.mapSkipRows.value, 10) || 0, 0, 200);
         const nameCol = parseInt(dom.mapNameCol.value, 10);
+        const maDeCol = parseInt(dom.mapMaDeCol.value, 10);
+        const diemCol = parseInt(dom.mapDiemCol.value, 10);
         const importRows = [];
 
         for (let i = 1 + skipRows; i < rows.length; i += 1) {
@@ -623,9 +665,11 @@
             const parsed = {
                 id: makeId(),
                 name,
-                maDe: extractByHeader(headerRow, row, ['ma de', 'm de', 'm d', 'ma']) || '',
+                maDe: Number.isInteger(maDeCol) && maDeCol >= 0 ? String(row[maDeCol] || '').trim() : '',
                 socau: parseNullableNumber(extractByHeader(headerRow, row, ['so cau', 's cau', 'socau'])),
-                diem: parseNullableNumber(extractByHeader(headerRow, row, ['diem', 'i m', 'score']))
+                diem: Number.isInteger(diemCol) && diemCol >= 0
+                    ? parseNullableNumber(row[diemCol])
+                    : parseNullableNumber(extractByHeader(headerRow, row, ['diem', 'diem so', 'score', 'mark', 'grade']))
             };
 
             importRows.push(normalizeStudent(parsed));
@@ -633,7 +677,13 @@
 
         state.importRows = importRows;
         dom.importCountSpan.textContent = String(importRows.length);
-        dom.importSummary.textContent = `Sẵn sàng import ${importRows.length} học sinh từ sheet ${sheetName}.`;
+        const maDeText = Number.isInteger(maDeCol) && maDeCol >= 0
+            ? `Mã đề: ${headerOptions[maDeCol]?.name || 'Cột đã chọn'}`
+            : 'Mã đề: Không import';
+        const diemText = Number.isInteger(diemCol) && diemCol >= 0
+            ? `Điểm: ${headerOptions[diemCol]?.name || 'Cột đã chọn'}`
+            : 'Điểm: Tự suy đoán nếu có';
+        dom.importSummary.textContent = `Sẵn sàng import ${importRows.length} học sinh từ sheet ${sheetName}. ${maDeText}. ${diemText}.`;
 
         const previewRows = rows.slice(0, Math.min(rows.length, 8));
         const previewHtml = `
@@ -668,6 +718,39 @@
         return fallback ? fallback.idx : 0;
     }
 
+    function resolveMaDeColumnIndex(headerOptions) {
+        const validDirect = new Set(['ma de', 'made', 'ma_de', 'ma de thi', 'made thi']);
+        const rejectTokens = ['id', 'dinhdanh', 'mahs', 'mahocsinh', 'studentid'];
+
+        for (const option of headerOptions) {
+            const normalized = normalizeText(option.name);
+            const compact = normalized.replace(/[^a-z0-9]/g, '');
+            if (!normalized) continue;
+            if (rejectTokens.some((token) => compact.includes(token))) continue;
+
+            if (validDirect.has(normalized)) return option.idx;
+            if (compact === 'made' || compact === 'madethi') return option.idx;
+            if (compact.includes('made') && !compact.includes('dinhdanh')) return option.idx;
+        }
+
+        return -1;
+    }
+
+    function resolveScoreColumnIndex(headerOptions) {
+        const directSet = new Set(['diem', 'diem so', 'score', 'mark', 'grade']);
+
+        for (const option of headerOptions) {
+            const normalized = normalizeText(option.name);
+            const compact = normalized.replace(/[^a-z0-9]/g, '');
+            if (!normalized) continue;
+            if (directSet.has(normalized)) return option.idx;
+            if (compact === 'diem' || compact === 'diemso') return option.idx;
+            if (compact.includes('diem') || compact.includes('score')) return option.idx;
+        }
+
+        return -1;
+    }
+
     function doImportStudents() {
         if (!state.importRows.length) {
             showToast('Không có dữ liệu để import.', 'error');
@@ -675,17 +758,25 @@
         }
 
         snapshotBeforeMutation();
-        const existingKey = new Set(state.students.map((x) => normalizeText(x.name)));
+        const clearBeforeImport = !!(dom.cbClearBeforeImport && dom.cbClearBeforeImport.checked);
+        const cleanedImportRows = dedupeImportRows(state.importRows.map(normalizeStudent));
         let added = 0;
 
-        state.importRows.forEach((row) => {
-            const key = normalizeText(row.name);
-            if (!key) return;
-            if (existingKey.has(key)) return;
-            existingKey.add(key);
-            state.students.push(normalizeStudent(row));
-            added += 1;
-        });
+        if (clearBeforeImport) {
+            state.students = cleanedImportRows;
+            added = cleanedImportRows.length;
+        } else {
+            const existingKey = new Set(state.students.map((x) => `${normalizeText(x.name)}|${normalizeText(x.maDe || '')}`));
+
+            cleanedImportRows.forEach((row) => {
+                const key = `${normalizeText(row.name)}|${normalizeText(row.maDe || '')}`;
+                if (!key) return;
+                if (existingKey.has(key)) return;
+                existingKey.add(key);
+                state.students.push(row);
+                added += 1;
+            });
+        }
 
         persistStudents();
         setCurrentFileName(state.pendingFileName || 'Excel import');
@@ -694,7 +785,24 @@
         closeModal(dom.modalImport);
         renderTableAndStats();
         updateUndoRedoState();
-        showToast(`Đã import ${added} học sinh`, 'success');
+        const modeText = clearBeforeImport ? ' (đã xóa dữ liệu cũ)' : '';
+        showToast(`Đã import ${added} học sinh${modeText}`, 'success');
+    }
+
+    function dedupeImportRows(rows) {
+        const uniqueRows = [];
+        const seen = new Set();
+
+        rows.forEach((row) => {
+            const nameKey = normalizeText(row.name);
+            if (!nameKey) return;
+            const key = `${nameKey}|${normalizeText(row.maDe || '')}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            uniqueRows.push(row);
+        });
+
+        return uniqueRows;
     }
 
     function bindExportModalEvents() {
@@ -1177,6 +1285,38 @@
         return 'Yếu';
     }
 
+    function getRowRankClass(score) {
+        if (!Number.isFinite(score)) return '';
+        if (score >= 8) return 'row-excellent';
+        if (score >= 6.5) return 'row-good';
+        if (score >= 5) return 'row-average';
+        return 'row-weak';
+    }
+
+    function getBadgeClass(score) {
+        if (!Number.isFinite(score)) return 'badge-none';
+        if (score >= 8) return 'badge-excellent';
+        if (score >= 6.5) return 'badge-good';
+        if (score >= 5) return 'badge-average';
+        return 'badge-weak';
+    }
+
+    function buildMaDeSelectOptions(currentValue) {
+        const current = String(currentValue || '').trim();
+        const values = state.config.danhSachMaDE.slice();
+        if (current && !values.includes(current)) {
+            values.push(current);
+        }
+
+        const html = ['<option value="">— Không có —</option>']
+            .concat(values.map((ma) => `<option value="${escapeAttr(ma)}">${escapeHtml(ma)}</option>`));
+
+        return html.map((item) => {
+            if (!current) return item;
+            return item.replace(`value="${escapeAttr(current)}"`, `value="${escapeAttr(current)}" selected`);
+        }).join('');
+    }
+
     function normalizeStudent(input) {
         return {
             id: input.id || makeId(),
@@ -1329,6 +1469,7 @@
         return String(value || '')
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[đĐ]/g, 'd')
             .toLowerCase()
             .trim();
     }
