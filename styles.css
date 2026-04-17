@@ -696,6 +696,20 @@ kbd {
 .th-xl    { width: 150px; text-align: center; }
 .th-act   { width: 80px; text-align: center; }
 
+/* Keep header/body perfectly aligned for Ma de & Xep loai columns */
+.stbl th.th-made,
+.stbl th.th-socau,
+.stbl th.th-diem,
+.stbl th.th-xl,
+.stbl td.td-made,
+.stbl td.td-socau,
+.stbl td.td-diem,
+.stbl td.td-xl {
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
 .stbl tbody tr {
     border-bottom: 1px solid var(--border);
     transition: background 0.12s ease, box-shadow 0.12s ease;
@@ -799,7 +813,7 @@ kbd {
     min-width: 66px;
     padding: 4px 10px;
     border-radius: 12px;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 700;
     letter-spacing: 0.15px;
 }
@@ -937,6 +951,291 @@ kbd {
 .chart-body {
     width: 100%;
     height: 240px;
+}
+
+/* ============================================
+   ADVANCED REPORT
+   ============================================ */
+.report-section {
+    margin: 14px 16px 20px;
+    padding: 16px;
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    border-radius: var(--radius-xl);
+    background:
+        radial-gradient(100% 130% at 100% 0%, rgba(99, 102, 241, 0.16) 0%, rgba(99, 102, 241, 0) 58%),
+        linear-gradient(180deg, rgba(23, 23, 51, 0.97), rgba(18, 18, 43, 0.98));
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+}
+
+.report-hdr {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.report-hdr h3 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #eef2ff;
+    letter-spacing: 0.2px;
+}
+
+.report-hdr p {
+    margin-top: 2px;
+    color: #9fb0c8;
+    font-size: 12px;
+}
+
+.report-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.report-printable {
+    padding: 10px;
+    border-radius: 14px;
+    background: rgba(8, 11, 32, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.report-kpis {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.rk-card {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(15, 23, 55, 0.68);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rk-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+    color: #9fb0c8;
+}
+
+.rk-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: #e2e8f0;
+    line-height: 1.1;
+}
+
+.report-block-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.report-block {
+    background: rgba(15, 23, 55, 0.62);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.report-block h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #cbd5e1;
+    margin-bottom: 10px;
+}
+
+.dist-list {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.dist-row {
+    display: grid;
+    grid-template-columns: 84px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: #cbd5e1;
+}
+
+.dist-track {
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(148, 163, 184, 0.2);
+}
+
+.dist-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    transition: width 0.28s ease;
+}
+
+.dist-excellent { background: linear-gradient(90deg, #10b981, #34d399); }
+.dist-good { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.dist-average { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.dist-weak { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+.rank-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rank-list li {
+    color: #dbe5f5;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.rank-score {
+    color: #f8fafc;
+    font-weight: 700;
+}
+
+.report-table-block {
+    padding-top: 10px;
+}
+
+.report-table-wrap {
+    overflow: auto;
+}
+
+.report-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.report-table th,
+.report-table td {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    padding: 7px 8px;
+    text-align: center;
+}
+
+.report-table th {
+    background: rgba(99, 102, 241, 0.17);
+    color: #cbd5e1;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.35px;
+}
+
+.report-table td {
+    color: #e2e8f0;
+    background: rgba(15, 23, 55, 0.42);
+}
+
+.report-score-table-block {
+    margin-top: 10px;
+}
+
+.report-score-wrap {
+    max-height: none;
+}
+
+.report-score-table {
+    font-size: 11px;
+}
+
+.report-score-table th,
+.report-score-table td {
+    padding: 6px 7px;
+}
+
+.report-score-table th:nth-child(1),
+.report-score-table td:nth-child(1) {
+    width: 44px;
+}
+
+.report-score-table th:nth-child(2),
+.report-score-table td:nth-child(2) {
+    text-align: left;
+    min-width: 220px;
+}
+
+.report-score-table th:nth-child(3),
+.report-score-table td:nth-child(3) {
+    width: 78px;
+}
+
+.report-score-table th:nth-child(4),
+.report-score-table td:nth-child(4),
+.report-score-table th:nth-child(5),
+.report-score-table td:nth-child(5),
+.report-score-table th:nth-child(6),
+.report-score-table td:nth-child(6) {
+    width: 90px;
+}
+
+.rep-cell-left {
+    text-align: left !important;
+}
+
+/* Export mode: optimize readability on A4 PDF */
+.report-printable.report-export-mode {
+    width: 980px;
+    max-width: none;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.report-printable.report-export-mode .report-kpis {
+    gap: 12px;
+}
+
+.report-printable.report-export-mode .rk-card {
+    padding: 12px 14px;
+}
+
+.report-printable.report-export-mode .rk-label {
+    font-size: 12px;
+}
+
+.report-printable.report-export-mode .rk-value {
+    font-size: 24px;
+}
+
+.report-printable.report-export-mode .report-block h4 {
+    font-size: 14px;
+}
+
+.report-printable.report-export-mode .dist-row {
+    font-size: 13px;
+}
+
+.report-printable.report-export-mode .rank-list li {
+    font-size: 13px;
+}
+
+.report-printable.report-export-mode .report-table {
+    font-size: 13px;
+}
+
+.report-printable.report-export-mode .report-table th {
+    font-size: 12px;
+}
+
+.report-printable.report-export-mode .report-table td {
+    font-size: 13px;
+}
+
+.report-printable.report-export-mode .report-score-table {
+    font-size: 12px;
 }
 
 /* ============================================
@@ -1362,7 +1661,7 @@ kbd {
     border-radius: var(--radius);
     color: var(--text-primary);
     padding: 6px 10px;
-    font-size: 13px;
+    font-size: 14px;
     font-family: var(--font);
     outline: none;
     transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -1415,15 +1714,44 @@ kbd {
     color: #e2e8f0;
 }
 
-.stbl td:nth-child(4),
-.stbl td:nth-child(5),
-.stbl td:nth-child(6),
-.stbl td:nth-child(7) {
+.stbl td.td-socau,
+.stbl td.td-diem,
+.stbl td.td-xl,
+.stbl td.td-act,
+.stbl td.td-made {
     text-align: center;
 }
 
-.stbl td:nth-child(5) .cell-input {
+.stbl td.td-diem .cell-input {
     font-weight: 700;
+}
+
+.stbl td.td-made .made-pill,
+.stbl td.td-xl .badge {
+    margin-inline: auto;
+}
+
+.stbl td.td-socau .cell-input,
+.stbl td.td-diem .cell-input {
+    display: block;
+    margin-inline: auto;
+}
+
+/* Fallback when the latest JS template has not been reloaded yet */
+.stbl tbody td:nth-child(3),
+.stbl tbody td:nth-child(4),
+.stbl tbody td:nth-child(5),
+.stbl tbody td:nth-child(6) {
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.stbl tbody td:nth-child(3) .made-pill,
+.stbl tbody td:nth-child(4) .cell-input,
+.stbl tbody td:nth-child(5) .cell-input,
+.stbl tbody td:nth-child(6) .badge {
+    margin-inline: auto;
 }
 
 .row-btn {
@@ -1576,6 +1904,28 @@ select {
 
     .chart-type-select {
         min-width: 98px;
+    }
+
+    .report-section {
+        margin: 10px;
+        padding: 12px;
+    }
+
+    .report-hdr {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .report-actions {
+        justify-content: flex-end;
+    }
+
+    .report-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .report-block-grid {
+        grid-template-columns: 1fr;
     }
 }
 

@@ -13,9 +13,10 @@
     <!-- jsPDF + autoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260417-2">
 </head>
 <body>
 
@@ -224,6 +225,7 @@
                 <span class="result-count" id="resultCount"></span>
                 <button class="btn btn-ghost btn-sm" id="btnAddStudent">➕ Thêm HS</button>
                 <button class="btn btn-ghost btn-sm" id="btnToggleChart">📊 Biểu đồ</button>
+                <button class="btn btn-ghost btn-sm" id="btnOpenAdvancedReport">📑 Báo cáo</button>
                 <button class="btn btn-ghost btn-sm" id="btnToggleMaDE" title="Hiện/ẩn cột mã đề">🏷️ Mã đề</button>
             </div>
         </div>
@@ -287,6 +289,125 @@
                 <canvas id="scoreChart"></canvas>
             </div>
         </div>
+
+        <!-- Advanced Report Section -->
+        <section class="report-section hidden" id="reportSection">
+            <div class="report-hdr">
+                <div>
+                    <h3>📑 Tổng quan báo cáo thống kê nâng cao</h3>
+                    <p id="reportSubtitle">Dữ liệu cập nhật theo danh sách hiện tại</p>
+                </div>
+                <div class="report-actions">
+                    <button class="btn btn-warning btn-sm" id="btnExportReportPdf">📄 Xuất PDF đẹp</button>
+                    <button class="btn btn-ghost btn-sm" id="btnCloseAdvancedReport">✕ Đóng</button>
+                </div>
+            </div>
+
+            <div class="report-printable" id="reportPrintable">
+                <div class="report-kpis">
+                    <article class="rk-card">
+                        <span class="rk-label">Tổng học sinh</span>
+                        <strong class="rk-value" id="repTotal">0</strong>
+                    </article>
+                    <article class="rk-card">
+                        <span class="rk-label">Đã có điểm</span>
+                        <strong class="rk-value" id="repEntered">0</strong>
+                    </article>
+                    <article class="rk-card">
+                        <span class="rk-label">Điểm trung bình cả lớp</span>
+                        <strong class="rk-value" id="repAvg">—</strong>
+                    </article>
+                    <article class="rk-card">
+                        <span class="rk-label">Trung bình điểm</span>
+                        <strong class="rk-value" id="repMedian">—</strong>
+                    </article>
+                    <article class="rk-card">
+                        <span class="rk-label">Độ lệch chuẩn</span>
+                        <strong class="rk-value" id="repStd">—</strong>
+                    </article>
+                    <article class="rk-card">
+                        <span class="rk-label">Tỷ lệ đạt (>= 5)</span>
+                        <strong class="rk-value" id="repPassRate">—</strong>
+                    </article>
+                </div>
+
+                <div class="report-block-grid">
+                    <section class="report-block">
+                        <h4>Phân phối xếp loại</h4>
+                        <div class="dist-list">
+                            <div class="dist-row">
+                                <span>Giỏi</span>
+                                <div class="dist-track"><div class="dist-fill dist-excellent" id="repDistExcellent"></div></div>
+                                <strong id="repDistExcellentText">0</strong>
+                            </div>
+                            <div class="dist-row">
+                                <span>Khá</span>
+                                <div class="dist-track"><div class="dist-fill dist-good" id="repDistGood"></div></div>
+                                <strong id="repDistGoodText">0</strong>
+                            </div>
+                            <div class="dist-row">
+                                <span>Trung bình</span>
+                                <div class="dist-track"><div class="dist-fill dist-average" id="repDistAverage"></div></div>
+                                <strong id="repDistAverageText">0</strong>
+                            </div>
+                            <div class="dist-row">
+                                <span>Yếu</span>
+                                <div class="dist-track"><div class="dist-fill dist-weak" id="repDistWeak"></div></div>
+                                <strong id="repDistWeakText">0</strong>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="report-block">
+                        <h4>Top 5 cao nhất</h4>
+                        <ol class="rank-list" id="repTopList"></ol>
+                    </section>
+
+                    <section class="report-block">
+                        <h4>Top 5 thấp nhất</h4>
+                        <ol class="rank-list" id="repBottomList"></ol>
+                    </section>
+                </div>
+
+                <section class="report-block report-table-block">
+                    <h4>Thống kê theo mã đề</h4>
+                    <div class="report-table-wrap">
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã đề</th>
+                                    <th>Số HS</th>
+                                    <th>Đã có điểm</th>
+                                    <th>Điểm TB</th>
+                                    <th>Giỏi</th>
+                                    <th>Yếu</th>
+                                </tr>
+                            </thead>
+                            <tbody id="repByMaDEBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="report-block report-table-block report-score-table-block">
+                    <h4>Bảng điểm chi tiết</h4>
+                    <div class="report-table-wrap report-score-wrap">
+                        <table class="report-table report-score-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Họ và tên</th>
+                                    <th>Mã đề</th>
+                                    <th>Số câu</th>
+                                    <th>Điểm</th>
+                                    <th>Xếp loại</th>
+                                </tr>
+                            </thead>
+                            <tbody id="repScoreBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </section>
 
     </main>
 </div>
@@ -423,7 +544,7 @@
         </div>
         <div class="modal-ftr">
             <button class="btn btn-success" id="btnExportExcel">📊 Xuất Excel</button>
-            <button class="btn btn-warning" id="btnExportPdf">📄 Xuất PDF</button>
+            <button class="btn btn-warning" id="btnExportPdf">📄 Xuất PDF đẹp</button>
             <button class="btn btn-secondary" data-close="modalExport">Hủy</button>
         </div>
     </div>
@@ -479,7 +600,7 @@
     </div>
 </div>
 
-<script src="config.js"></script>
-<script src="app.js"></script>
+<script src="config.js?v=20260417-2"></script>
+<script src="app.js?v=20260417-2"></script>
 </body>
 </html>

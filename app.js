@@ -122,6 +122,28 @@
         dom.chartAvgBadge = byId('chartAvgBadge');
         dom.chartTypeSelect = byId('chartTypeSelect');
 
+        dom.reportSection = byId('reportSection');
+        dom.reportSubtitle = byId('reportSubtitle');
+        dom.reportPrintable = byId('reportPrintable');
+        dom.repTotal = byId('repTotal');
+        dom.repEntered = byId('repEntered');
+        dom.repAvg = byId('repAvg');
+        dom.repMedian = byId('repMedian');
+        dom.repStd = byId('repStd');
+        dom.repPassRate = byId('repPassRate');
+        dom.repDistExcellent = byId('repDistExcellent');
+        dom.repDistGood = byId('repDistGood');
+        dom.repDistAverage = byId('repDistAverage');
+        dom.repDistWeak = byId('repDistWeak');
+        dom.repDistExcellentText = byId('repDistExcellentText');
+        dom.repDistGoodText = byId('repDistGoodText');
+        dom.repDistAverageText = byId('repDistAverageText');
+        dom.repDistWeakText = byId('repDistWeakText');
+        dom.repTopList = byId('repTopList');
+        dom.repBottomList = byId('repBottomList');
+        dom.repByMaDEBody = byId('repByMaDEBody');
+        dom.repScoreBody = byId('repScoreBody');
+
         dom.modalImport = byId('modalImport');
         dom.dropZone = byId('dropZone');
         dom.fileInput = byId('fileInput');
@@ -176,6 +198,11 @@
         byId('btnSaveCloudConfig').addEventListener('click', saveCloudConfig);
         byId('btnToggleChart').addEventListener('click', toggleChart);
         byId('btnCloseChart').addEventListener('click', () => setChartVisible(false));
+        byId('btnOpenAdvancedReport').addEventListener('click', () => setAdvancedReportVisible(true));
+        byId('btnCloseAdvancedReport').addEventListener('click', () => setAdvancedReportVisible(false));
+        byId('btnExportReportPdf').addEventListener('click', async () => {
+            await exportPdf();
+        });
         byId('btnToggleMaDE').addEventListener('click', toggleMaDE);
         byId('btnAddStudent').addEventListener('click', () => openStudentModal(-1));
 
@@ -321,21 +348,21 @@
 
             return `
                 <tr data-student-id="${escapeAttr(student.id)}" class="${rowRankClass} ${state.selectedStudentId === student.id ? 'row-active' : ''}">
-                    <td>${renderIndex + 1}</td>
-                    <td>
+                    <td class="td-stt">${renderIndex + 1}</td>
+                    <td class="td-name">
                         <input class="cell-input" data-field="name" value="${escapeAttr(student.name)}" placeholder="Họ và tên">
                     </td>
-                    <td class="made-col ${state.showMaDE ? '' : 'hidden'}">
+                    <td class="td-made made-col ${state.showMaDE ? '' : 'hidden'}">
                         <span class="made-pill">${maDeText}</span>
                     </td>
-                    <td>
+                    <td class="td-socau">
                         <input class="cell-input" data-field="socau" type="number" min="0" max="${state.config.soCauToiDa}" value="${escapeAttr(soCau)}" placeholder="Số câu">
                     </td>
-                    <td>
+                    <td class="td-diem">
                         <input class="cell-input" data-field="diem" type="number" min="0" max="10" step="0.01" value="${escapeAttr(scoreText)}" placeholder="Điểm">
                     </td>
-                    <td><span class="badge ${badgeClass}">${xepLoai}</span></td>
-                    <td>
+                    <td class="td-xl"><span class="badge ${badgeClass}">${xepLoai}</span></td>
+                    <td class="td-act">
                         <button class="row-btn" data-action="focus-score" title="Nhập nhanh">🎯</button>
                         <button class="row-btn" data-action="delete" title="Xóa">🗑️</button>
                     </td>
@@ -353,6 +380,7 @@
         renderHeaderStats();
         renderProgress();
         renderChartIfVisible();
+        renderAdvancedReport();
     }
 
     function renderHeaderStats() {
@@ -417,7 +445,7 @@
                     focusDirectInputForStudent(rows[0].id, 'diem');
                 }
             }
-        }, 300);
+        }, 500);
     }
 
     function clearSearch() {
@@ -915,6 +943,8 @@
             dom.expRecordName.value = state.currentFileName ? stripExtension(state.currentFileName) : '';
         }
 
+        renderAdvancedReport();
+
         openModal(dom.modalExport);
     }
 
@@ -958,36 +988,114 @@
             return;
         }
 
+        if (!window.html2canvas) {
+            showToast('Thiếu thư viện html2canvas.', 'error');
+            return;
+        }
+
         if (!state.students.length) {
             showToast('Chưa có dữ liệu để xuất.', 'error');
             return;
         }
 
         const fileBase = buildExportName();
-        const doc = new window.jspdf.jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
-        doc.setFontSize(14);
-        doc.text(`Bảng điểm - ${fileBase}`, 40, 40);
-        doc.setFontSize(10);
-        doc.text(`Ngày xuất: ${new Date().toLocaleString('vi-VN')}`, 40, 58);
+        const wasHidden = dom.reportSection.classList.contains('hidden');
+        let exportModeApplied = false;
+        let exportedWithJsPdf = false;
 
-        const body = state.students.map((s, idx) => [
-            idx + 1,
-            s.name,
-            s.maDe || '',
-            Number.isFinite(s.socau) ? s.socau : '',
-            Number.isFinite(getStudentScore(s)) ? formatScore(getStudentScore(s)) : '',
-            getRank(getStudentScore(s))
-        ]);
+        try {
+            if (wasHidden) {
+                setAdvancedReportVisible(true);
+            }
 
-        if (typeof doc.autoTable === 'function') {
-            doc.autoTable({
-                startY: 72,
-                head: [['#', 'Họ và tên', 'Mã đề', 'Số câu', 'Điểm', 'Xếp loại']],
-                body
+            dom.reportPrintable.classList.add('report-export-mode');
+            exportModeApplied = true;
+            renderAdvancedReport();
+            await waitForNextPaint();
+
+            const canvas = await window.html2canvas(dom.reportPrintable, {
+                scale: 2,
+                backgroundColor: '#0b122d',
+                useCORS: true,
+                logging: false
             });
+
+            const doc = new window.jspdf.jsPDF({ orientation: 'l', unit: 'pt', format: 'a4' });
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const margin = 16;
+            const targetWidth = pageWidth - margin * 2;
+            const scaleRatio = targetWidth / canvas.width;
+            const sliceHeightPx = Math.max(1, Math.floor((pageHeight - margin * 2) / scaleRatio));
+
+            let renderedY = 0;
+            let pageIndex = 0;
+
+            while (renderedY < canvas.height) {
+                const currentSliceHeight = Math.min(sliceHeightPx, canvas.height - renderedY);
+                const pageCanvas = document.createElement('canvas');
+                pageCanvas.width = canvas.width;
+                pageCanvas.height = currentSliceHeight;
+
+                const pageContext = pageCanvas.getContext('2d');
+                if (!pageContext) break;
+
+                pageContext.drawImage(
+                    canvas,
+                    0,
+                    renderedY,
+                    canvas.width,
+                    currentSliceHeight,
+                    0,
+                    0,
+                    canvas.width,
+                    currentSliceHeight
+                );
+
+                if (pageIndex > 0) {
+                    doc.addPage();
+                }
+
+                const imageHeight = currentSliceHeight * scaleRatio;
+                doc.addImage(
+                    pageCanvas.toDataURL('image/png'),
+                    'PNG',
+                    margin,
+                    margin,
+                    targetWidth,
+                    imageHeight,
+                    undefined,
+                    'FAST'
+                );
+
+                renderedY += currentSliceHeight;
+                pageIndex += 1;
+            }
+
+            if (pageIndex > 0) {
+                doc.save(`${fileBase}.pdf`);
+                exportedWithJsPdf = true;
+            }
+        } catch (error) {
+            console.error('PDF canvas export failed, fallback to print window:', error);
+        } finally {
+            if (exportModeApplied) {
+                dom.reportPrintable.classList.remove('report-export-mode');
+            }
+            if (wasHidden) {
+                setAdvancedReportVisible(false);
+            }
         }
 
-        doc.save(`${fileBase}.pdf`);
+        if (!exportedWithJsPdf) {
+            const opened = exportPdfViaPrintWindow(fileBase);
+            if (!opened) {
+                showToast('Không thể mở cửa sổ in PDF. Kiểm tra trình chặn popup.', 'error');
+                return;
+            }
+
+            showToast('Đã mở cửa sổ in. Chọn Save as PDF để lưu đúng font tiếng Việt.', 'warning');
+        }
 
         const cloudOk = await maybeSaveToCloud(fileBase);
         if (cloudOk === false) return;
@@ -995,6 +1103,113 @@
         addRecentFile(`${fileBase}.pdf`);
         closeModal(dom.modalExport);
         showToast('Đã xuất PDF thành công', 'success');
+    }
+
+    function exportPdfViaPrintWindow(fileBase) {
+        const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1024,height=720');
+        if (!printWindow) return false;
+
+        const rows = state.students.map((student, index) => {
+            const score = getStudentScore(student);
+            const soCauText = Number.isFinite(student.socau) ? String(student.socau) : '—';
+            const scoreText = Number.isFinite(score) ? formatScore(score) : '—';
+            return `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td class="cell-left">${escapeHtml(student.name)}</td>
+                    <td>${escapeHtml(student.maDe || '—')}</td>
+                    <td>${soCauText}</td>
+                    <td>${scoreText}</td>
+                    <td>${escapeHtml(getRank(score))}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const html = `
+            <!DOCTYPE html>
+            <html lang="vi">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>${escapeHtml(fileBase)} - PDF</title>
+                <style>
+                    @page { size: A4 portrait; margin: 14mm; }
+                    body {
+                        font-family: 'Segoe UI', 'Noto Sans', Tahoma, Arial, sans-serif;
+                        color: #0f172a;
+                        margin: 0;
+                        font-size: 12px;
+                        line-height: 1.4;
+                    }
+                    .header {
+                        margin-bottom: 12px;
+                    }
+                    .title {
+                        font-size: 20px;
+                        font-weight: 800;
+                        margin-bottom: 2px;
+                    }
+                    .meta {
+                        color: #475569;
+                        font-size: 12px;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                    }
+                    th, td {
+                        border: 1px solid #cbd5e1;
+                        padding: 6px 8px;
+                        text-align: center;
+                    }
+                    th {
+                        background: #0ea5e9;
+                        color: #ffffff;
+                        font-size: 11px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.2px;
+                    }
+                    .cell-left { text-align: left; }
+                    tbody tr:nth-child(even) { background: #f8fafc; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="title">Bảng điểm học sinh</div>
+                    <div class="meta">Bản ghi: ${escapeHtml(fileBase)}</div>
+                    <div class="meta">Ngày xuất: ${escapeHtml(new Date().toLocaleString('vi-VN'))}</div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Họ và tên</th>
+                            <th>Mã đề</th>
+                            <th>Số câu</th>
+                            <th>Điểm</th>
+                            <th>Xếp loại</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+
+                <script>
+                    window.onload = function () {
+                        setTimeout(function () { window.print(); }, 350);
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        return true;
     }
 
     async function maybeSaveToCloud(fileBase) {
@@ -1461,9 +1676,173 @@
         });
     }
 
+    function setAdvancedReportVisible(visible) {
+        if (!dom.reportSection) return;
+        dom.reportSection.classList.toggle('hidden', !visible);
+        if (visible) {
+            renderAdvancedReport();
+        }
+    }
+
+    function renderAdvancedReport() {
+        if (!dom.reportSection || !dom.reportPrintable) return;
+
+        const total = state.students.length;
+        const scoredStudents = state.students
+            .map((student) => ({
+                student,
+                score: getStudentScore(student)
+            }))
+            .filter((item) => Number.isFinite(item.score));
+
+        const entered = scoredStudents.length;
+        const scores = scoredStudents.map((item) => item.score);
+        const avg = entered ? scores.reduce((sum, value) => sum + value, 0) / entered : NaN;
+        const sortedScoresAsc = scores.slice().sort((a, b) => a - b);
+        const median = entered
+            ? (entered % 2 === 0
+                ? (sortedScoresAsc[entered / 2 - 1] + sortedScoresAsc[entered / 2]) / 2
+                : sortedScoresAsc[Math.floor(entered / 2)])
+            : NaN;
+        const variance = entered
+            ? scores.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / entered
+            : NaN;
+        const std = Number.isFinite(variance) ? Math.sqrt(variance) : NaN;
+        const passCount = scores.filter((score) => score >= 5).length;
+        const passRate = entered ? (passCount / entered) * 100 : NaN;
+
+        const dist = {
+            excellent: scores.filter((score) => score >= 8).length,
+            good: scores.filter((score) => score >= 6.5 && score < 8).length,
+            average: scores.filter((score) => score >= 5 && score < 6.5).length,
+            weak: scores.filter((score) => score < 5).length
+        };
+
+        const distWidth = {
+            excellent: entered ? (dist.excellent / entered) * 100 : 0,
+            good: entered ? (dist.good / entered) * 100 : 0,
+            average: entered ? (dist.average / entered) * 100 : 0,
+            weak: entered ? (dist.weak / entered) * 100 : 0
+        };
+
+        dom.repTotal.textContent = String(total);
+        dom.repEntered.textContent = String(entered);
+        dom.repAvg.textContent = Number.isFinite(avg) ? formatScore(avg) : '—';
+        dom.repMedian.textContent = Number.isFinite(median) ? formatScore(median) : '—';
+        dom.repStd.textContent = Number.isFinite(std) ? formatScore(std) : '—';
+        dom.repPassRate.textContent = Number.isFinite(passRate) ? `${passRate.toFixed(1)}%` : '—';
+
+        dom.repDistExcellent.style.width = `${distWidth.excellent}%`;
+        dom.repDistGood.style.width = `${distWidth.good}%`;
+        dom.repDistAverage.style.width = `${distWidth.average}%`;
+        dom.repDistWeak.style.width = `${distWidth.weak}%`;
+
+        dom.repDistExcellentText.textContent = `${dist.excellent}`;
+        dom.repDistGoodText.textContent = `${dist.good}`;
+        dom.repDistAverageText.textContent = `${dist.average}`;
+        dom.repDistWeakText.textContent = `${dist.weak}`;
+
+        const topFive = scoredStudents
+            .slice()
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 5);
+        const bottomFive = scoredStudents
+            .slice()
+            .sort((a, b) => a.score - b.score)
+            .slice(0, 5);
+
+        dom.repTopList.innerHTML = topFive.length
+            ? topFive.map((item) => `
+                <li>${escapeHtml(item.student.name)} - <span class="rank-score">${formatScore(item.score)}</span></li>
+            `).join('')
+            : '<li>Chưa có dữ liệu điểm</li>';
+
+        dom.repBottomList.innerHTML = bottomFive.length
+            ? bottomFive.map((item) => `
+                <li>${escapeHtml(item.student.name)} - <span class="rank-score">${formatScore(item.score)}</span></li>
+            `).join('')
+            : '<li>Chưa có dữ liệu điểm</li>';
+
+        const byMaDe = new Map();
+        state.students.forEach((student) => {
+            const key = student.maDe || '—';
+            const score = getStudentScore(student);
+            if (!byMaDe.has(key)) {
+                byMaDe.set(key, {
+                    total: 0,
+                    entered: 0,
+                    excellent: 0,
+                    weak: 0,
+                    scoreSum: 0
+                });
+            }
+
+            const bucket = byMaDe.get(key);
+            bucket.total += 1;
+
+            if (Number.isFinite(score)) {
+                bucket.entered += 1;
+                bucket.scoreSum += score;
+                if (score >= 8) bucket.excellent += 1;
+                if (score < 5) bucket.weak += 1;
+            }
+        });
+
+        const rows = Array.from(byMaDe.entries())
+            .sort(([a], [b]) => String(a).localeCompare(String(b), 'vi'))
+            .map(([maDe, bucket]) => {
+                const avgByCode = bucket.entered ? bucket.scoreSum / bucket.entered : NaN;
+                return `
+                    <tr>
+                        <td>${escapeHtml(String(maDe))}</td>
+                        <td>${bucket.total}</td>
+                        <td>${bucket.entered}</td>
+                        <td>${Number.isFinite(avgByCode) ? formatScore(avgByCode) : '—'}</td>
+                        <td>${bucket.excellent}</td>
+                        <td>${bucket.weak}</td>
+                    </tr>
+                `;
+            });
+
+        dom.repByMaDEBody.innerHTML = rows.length
+            ? rows.join('')
+            : '<tr><td colspan="6">Chưa có dữ liệu</td></tr>';
+
+        const scoreRows = state.students
+            .map((student, index) => {
+                const score = getStudentScore(student);
+                const soCauText = Number.isFinite(student.socau) ? String(student.socau) : '—';
+                const scoreText = Number.isFinite(score) ? formatScore(score) : '—';
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td class="rep-cell-left">${escapeHtml(student.name)}</td>
+                        <td>${escapeHtml(student.maDe || '—')}</td>
+                        <td>${soCauText}</td>
+                        <td>${scoreText}</td>
+                        <td>${escapeHtml(getRank(score))}</td>
+                    </tr>
+                `;
+            });
+
+        dom.repScoreBody.innerHTML = scoreRows.length
+            ? scoreRows.join('')
+            : '<tr><td colspan="6">Chưa có dữ liệu học sinh</td></tr>';
+
+        dom.reportSubtitle.textContent = `Cập nhật lúc ${new Date().toLocaleString('vi-VN')} - ${entered}/${total} học sinh đã có điểm`;
+    }
+
     function toggleMaDE() {
         state.showMaDE = !state.showMaDE;
         renderTableAndStats();
+    }
+
+    function waitForNextPaint() {
+        return new Promise((resolve) => {
+            requestAnimationFrame(() => {
+                requestAnimationFrame(resolve);
+            });
+        });
     }
 
     function snapshotBeforeMutation() {
