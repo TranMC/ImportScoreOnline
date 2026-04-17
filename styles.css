@@ -1193,8 +1193,53 @@ kbd {
 .report-score-table td:nth-child(5),
 .report-score-table th:nth-child(6),
 .report-score-table td:nth-child(6) {
-    width: 90px;
+    width: 110px;
 }
+
+.report-score-table th:nth-child(6),
+.report-score-table td:nth-child(6) {
+    width: 130px;
+}
+
+.rep-score-row {
+    transition: background 0.2s ease;
+}
+
+.rep-score-row-excellent td {
+    background: rgba(16, 185, 129, 0.14);
+}
+
+.rep-score-row-good td {
+    background: rgba(245, 158, 11, 0.16);
+}
+
+.rep-score-row-average td {
+    background: rgba(59, 130, 246, 0.16);
+}
+
+.rep-score-row-weak td {
+    background: rgba(239, 68, 68, 0.16);
+}
+
+.rep-rank-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.rep-rank-chip-excellent { background: rgba(16,185,129,0.18); color: #6ee7b7; border-color: rgba(16,185,129,0.5); }
+.rep-rank-chip-good { background: rgba(245,158,11,0.2); color: #fcd34d; border-color: rgba(245,158,11,0.5); }
+.rep-rank-chip-average { background: rgba(59,130,246,0.2); color: #93c5fd; border-color: rgba(59,130,246,0.5); }
+.rep-rank-chip-weak { background: rgba(239,68,68,0.2); color: #fca5a5; border-color: rgba(239,68,68,0.5); }
+.rep-rank-chip-none { background: rgba(148,163,184,0.2); color: #cbd5e1; border-color: rgba(148,163,184,0.45); }
 
 .rep-cell-left {
     text-align: left !important;
@@ -1206,6 +1251,10 @@ kbd {
     max-width: none;
     margin: 0 auto;
     padding: 16px;
+}
+
+.report-printable.report-export-mode.report-export-portrait {
+    width: 710px;
 }
 
 .report-printable.report-export-mode .report-kpis {
@@ -1250,6 +1299,12 @@ kbd {
 
 .report-printable.report-export-mode .report-score-table {
     font-size: 12px;
+}
+
+.report-printable.report-export-mode .rep-rank-chip {
+    font-size: 12px;
+    min-width: 76px;
+    white-space: nowrap;
 }
 
 /* ============================================

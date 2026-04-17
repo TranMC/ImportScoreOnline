@@ -170,6 +170,7 @@
         dom.expAvgScore = byId('expAvgScore');
         dom.expRecordName = byId('expRecordName');
         dom.expClassName = byId('expClassName');
+        dom.expPdfOrientation = byId('expPdfOrientation');
         dom.cbSaveToCloud = byId('cbSaveToCloud');
         dom.cloudSubOptions = byId('cloudSubOptions');
         dom.cbIsPublic = byId('cbIsPublic');
@@ -955,6 +956,10 @@
             dom.expRecordName.value = state.currentFileName ? stripExtension(state.currentFileName) : '';
         }
 
+        if (dom.expPdfOrientation && !dom.expPdfOrientation.value) {
+            dom.expPdfOrientation.value = 'landscape';
+        }
+
         renderAdvancedReport();
 
         openModal(dom.modalExport);
@@ -1012,6 +1017,7 @@
 
         const fileBase = buildExportName();
         const wasHidden = dom.modalReport.classList.contains('hidden');
+        const pdfOrientation = getPdfOrientation();
         let exportModeApplied = false;
         let exportedWithJsPdf = false;
 
@@ -1021,6 +1027,7 @@
             }
 
             dom.reportPrintable.classList.add('report-export-mode');
+            dom.reportPrintable.classList.toggle('report-export-portrait', pdfOrientation === 'portrait');
             exportModeApplied = true;
             renderAdvancedReport();
             await waitForNextPaint();
@@ -1032,7 +1039,8 @@
                 logging: false
             });
 
-            const doc = new window.jspdf.jsPDF({ orientation: 'l', unit: 'pt', format: 'a4' });
+            const docOrientation = pdfOrientation === 'portrait' ? 'p' : 'l';
+            const doc = new window.jspdf.jsPDF({ orientation: docOrientation, unit: 'pt', format: 'a4' });
             const pageWidth = doc.internal.pageSize.getWidth();
             const pageHeight = doc.internal.pageSize.getHeight();
             const margin = 16;
@@ -1093,6 +1101,7 @@
         } finally {
             if (exportModeApplied) {
                 dom.reportPrintable.classList.remove('report-export-mode');
+                dom.reportPrintable.classList.remove('report-export-portrait');
             }
             if (wasHidden) {
                 setAdvancedReportVisible(false);
@@ -1100,7 +1109,7 @@
         }
 
         if (!exportedWithJsPdf) {
-            const opened = exportPdfViaPrintWindow(fileBase);
+            const opened = exportPdfViaPrintWindow(fileBase, pdfOrientation);
             if (!opened) {
                 showToast('Không thể mở cửa sổ in PDF. Kiểm tra trình chặn popup.', 'error');
                 return;
@@ -1117,22 +1126,24 @@
         showToast('Đã xuất PDF thành công', 'success');
     }
 
-    function exportPdfViaPrintWindow(fileBase) {
+    function exportPdfViaPrintWindow(fileBase, orientation) {
         const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=1024,height=720');
         if (!printWindow) return false;
+        const pageOrientation = orientation === 'portrait' ? 'portrait' : 'landscape';
 
         const rows = state.students.map((student, index) => {
             const score = getStudentScore(student);
             const soCauText = Number.isFinite(student.socau) ? String(student.socau) : '—';
             const scoreText = Number.isFinite(score) ? formatScore(score) : '—';
+            const rankMeta = getRankMeta(score);
             return `
-                <tr>
+                <tr class="report-rank-row report-rank-row-${rankMeta.key}">
                     <td>${index + 1}</td>
                     <td class="cell-left">${escapeHtml(student.name)}</td>
                     <td>${escapeHtml(student.maDe || '—')}</td>
                     <td>${soCauText}</td>
                     <td>${scoreText}</td>
-                    <td>${escapeHtml(getRank(score))}</td>
+                    <td><span class="report-rank-chip report-rank-chip-${rankMeta.key}">${escapeHtml(rankMeta.label)}</span></td>
                 </tr>
             `;
         }).join('');
@@ -1145,7 +1156,7 @@
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <title>${escapeHtml(fileBase)} - PDF</title>
                 <style>
-                    @page { size: A4 portrait; margin: 14mm; }
+                    @page { size: A4 ${pageOrientation}; margin: 14mm; }
                     body {
                         font-family: 'Segoe UI', 'Noto Sans', Tahoma, Arial, sans-serif;
                         color: #0f172a;
@@ -1184,6 +1195,24 @@
                     }
                     .cell-left { text-align: left; }
                     tbody tr:nth-child(even) { background: #f8fafc; }
+                    .report-rank-chip {
+                        display: inline-block;
+                        min-width: 70px;
+                        padding: 3px 9px;
+                        border-radius: 999px;
+                        font-weight: 700;
+                        font-size: 11px;
+                        white-space: nowrap;
+                    }
+                    .report-rank-chip-excellent { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+                    .report-rank-chip-good { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+                    .report-rank-chip-average { background: #dbeafe; color: #1e3a8a; border: 1px solid #93c5fd; }
+                    .report-rank-chip-weak { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+                    .report-rank-chip-none { background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1; }
+                    .report-rank-row-excellent { background: #f0fdf4 !important; }
+                    .report-rank-row-good { background: #fffbeb !important; }
+                    .report-rank-row-average { background: #eff6ff !important; }
+                    .report-rank-row-weak { background: #fef2f2 !important; }
                 </style>
             </head>
             <body>
@@ -1884,14 +1913,15 @@
                 const score = getStudentScore(student);
                 const soCauText = Number.isFinite(student.socau) ? String(student.socau) : '—';
                 const scoreText = Number.isFinite(score) ? formatScore(score) : '—';
+                const rankMeta = getRankMeta(score);
                 return `
-                    <tr>
+                    <tr class="rep-score-row rep-score-row-${rankMeta.key}">
                         <td>${index + 1}</td>
                         <td class="rep-cell-left">${escapeHtml(student.name)}</td>
                         <td>${escapeHtml(student.maDe || '—')}</td>
                         <td>${soCauText}</td>
                         <td>${scoreText}</td>
-                        <td>${escapeHtml(getRank(score))}</td>
+                        <td><span class="rep-rank-chip rep-rank-chip-${rankMeta.key}">${escapeHtml(rankMeta.label)}</span></td>
                     </tr>
                 `;
             });
@@ -2037,6 +2067,19 @@
         if (score >= 6.5) return 'badge-good';
         if (score >= 5) return 'badge-average';
         return 'badge-weak';
+    }
+
+    function getPdfOrientation() {
+        if (!dom.expPdfOrientation) return 'landscape';
+        return dom.expPdfOrientation.value === 'portrait' ? 'portrait' : 'landscape';
+    }
+
+    function getRankMeta(score) {
+        if (!Number.isFinite(score)) return { key: 'none', label: '—' };
+        if (score >= 8) return { key: 'excellent', label: 'Giỏi' };
+        if (score >= 6.5) return { key: 'good', label: 'Khá' };
+        if (score >= 5) return { key: 'average', label: 'Trung bình' };
+        return { key: 'weak', label: 'Yếu' };
     }
 
     function normalizeStudent(input) {
