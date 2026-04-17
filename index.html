@@ -278,8 +278,12 @@
                 <div class="chart-hdr-right">
                     <select id="chartTypeSelect" class="chart-type-select" title="Chọn loại biểu đồ">
                         <option value="bar">Cột</option>
+                        <option value="barHorizontal">Cột ngang</option>
                         <option value="line">Đường</option>
                         <option value="doughnut">Vòng tròn</option>
+                        <option value="pie">Tròn đặc</option>
+                        <option value="polarArea">Vùng cực</option>
+                        <option value="radar">Radar</option>
                     </select>
                     <span class="chart-avg-badge" id="chartAvgBadge"></span>
                     <button class="btn btn-ghost btn-sm" id="btnCloseChart">✕ Đóng</button>
@@ -290,8 +294,9 @@
             </div>
         </div>
 
-        <!-- Advanced Report Section -->
-        <section class="report-section hidden" id="reportSection">
+        <!-- Advanced Report Section (Popup) -->
+        <div class="modal-overlay hidden" id="modalReport">
+        <section class="report-section" id="reportSection">
             <div class="report-hdr">
                 <div>
                     <h3>📑 Tổng quan báo cáo thống kê nâng cao</h3>
@@ -408,6 +413,7 @@
                 </section>
             </div>
         </section>
+        </div>
 
     </main>
 </div>

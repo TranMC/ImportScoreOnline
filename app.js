@@ -24,7 +24,7 @@
         ui: 'importscore.ui.v1'
     };
 
-    const ALLOWED_CHART_TYPES = new Set(['bar', 'line', 'doughnut']);
+    const ALLOWED_CHART_TYPES = new Set(['bar', 'line', 'doughnut', 'pie', 'polarArea', 'radar', 'barHorizontal']);
     const ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS = new Set(['none', 'socau', 'made']);
 
     const DEFAULT_CONFIG = {
@@ -53,6 +53,7 @@
         redoStack: [],
         maxHistory: 50,
         cloudBusy: false,
+        chartRenderTimer: null,
         chartDrag: {
             active: false,
             pointerId: null,
@@ -122,6 +123,7 @@
         dom.chartAvgBadge = byId('chartAvgBadge');
         dom.chartTypeSelect = byId('chartTypeSelect');
 
+        dom.modalReport = byId('modalReport');
         dom.reportSection = byId('reportSection');
         dom.reportSubtitle = byId('reportSubtitle');
         dom.reportPrintable = byId('reportPrintable');
@@ -217,7 +219,7 @@
                 : 'bar';
             state.ui.chartType = chartType;
             localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
-            renderChartIfVisible();
+            renderChartIfVisible({ immediate: true });
         });
         dom.currentMaDESelect.addEventListener('change', () => {
             state.currentMaDE = dom.currentMaDESelect.value.trim();
@@ -257,6 +259,7 @@
         });
 
         dom.tableBody.addEventListener('input', handleTableInput);
+        dom.tableBody.addEventListener('change', handleTableChange);
         dom.tableBody.addEventListener('keydown', handleTableKeydown);
         dom.tableBody.addEventListener('click', handleTableClick);
 
@@ -536,8 +539,16 @@
         persistStudents(false);
         renderHeaderStats();
         renderProgress();
-        renderChartIfVisible();
         updateUndoRedoState();
+    }
+
+    function handleTableChange(event) {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement) && !(input instanceof HTMLSelectElement)) return;
+
+        if (!input.dataset.field) return;
+
+        renderChartIfVisible({ immediate: true });
     }
 
     function handleTableKeydown(event) {
@@ -582,6 +593,7 @@
 
         input.blur();
         persistStudents();
+        renderChartIfVisible({ immediate: true });
     }
 
     function handleTableClick(event) {
@@ -999,7 +1011,7 @@
         }
 
         const fileBase = buildExportName();
-        const wasHidden = dom.reportSection.classList.contains('hidden');
+        const wasHidden = dom.modalReport.classList.contains('hidden');
         let exportModeApplied = false;
         let exportedWithJsPdf = false;
 
@@ -1446,7 +1458,13 @@
         dom.chartSection.classList.toggle('hidden', !visible);
         if (visible) {
             applySavedChartPosition();
-            renderChart();
+            renderChartIfVisible({ immediate: true });
+            return;
+        }
+
+        if (state.chartRenderTimer) {
+            clearTimeout(state.chartRenderTimer);
+            state.chartRenderTimer = null;
         }
     }
 
@@ -1570,16 +1588,25 @@
         return headerHeight + progressHeight + 6;
     }
 
-    function renderChartIfVisible() {
-        if (!dom.chartSection.classList.contains('hidden')) {
-            renderChart();
+    function renderChartIfVisible(options = {}) {
+        if (dom.chartSection.classList.contains('hidden')) return;
+
+        const delayMs = options.immediate ? 0 : 160;
+        if (state.chartRenderTimer) {
+            clearTimeout(state.chartRenderTimer);
         }
+
+        state.chartRenderTimer = setTimeout(() => {
+            state.chartRenderTimer = null;
+            renderChart();
+        }, delayMs);
     }
 
     function renderChart() {
         if (!window.Chart) return;
         const scores = state.students.map(getStudentScore).filter(Number.isFinite);
-        const chartType = ALLOWED_CHART_TYPES.has(state.ui.chartType) ? state.ui.chartType : 'bar';
+        const selectedChartType = ALLOWED_CHART_TYPES.has(state.ui.chartType) ? state.ui.chartType : 'bar';
+        const chartType = selectedChartType === 'barHorizontal' ? 'bar' : selectedChartType;
 
         const buckets = {
             '0-4.9': 0,
@@ -1598,21 +1625,21 @@
         const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : NaN;
         dom.chartAvgBadge.textContent = Number.isFinite(avg) ? `Điểm TB: ${formatScore(avg)}` : 'Điểm TB: —';
 
-        if (state.chart) {
-            state.chart.destroy();
-        }
-
         const labels = Object.keys(buckets);
         const values = Object.values(buckets);
         const palette = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981'];
-        const isCircularChart = chartType === 'doughnut';
+        const isCircularChart = selectedChartType === 'doughnut'
+            || selectedChartType === 'pie'
+            || selectedChartType === 'polarArea';
+        const isRadarChart = selectedChartType === 'radar';
+        const isHorizontalBar = selectedChartType === 'barHorizontal';
 
         const dataset = {
             label: 'Số HS theo mức điểm',
             data: values
         };
 
-        if (chartType === 'line') {
+        if (selectedChartType === 'line') {
             dataset.borderColor = '#60a5fa';
             dataset.backgroundColor = 'rgba(96, 165, 250, 0.25)';
             dataset.borderWidth = 2;
@@ -1621,43 +1648,63 @@
             dataset.pointRadius = 4;
             dataset.pointHoverRadius = 5;
             dataset.pointBackgroundColor = '#c7d2fe';
+        } else if (isRadarChart) {
+            dataset.backgroundColor = 'rgba(96, 165, 250, 0.25)';
+            dataset.borderColor = '#60a5fa';
+            dataset.borderWidth = 2;
+            dataset.pointRadius = 3;
+            dataset.pointBackgroundColor = '#c7d2fe';
         } else {
             dataset.backgroundColor = palette;
             dataset.borderColor = chartType === 'bar' ? 'rgba(255,255,255,0.15)' : '#12122b';
             dataset.borderWidth = chartType === 'bar' ? 1 : 2;
+            dataset.borderRadius = chartType === 'bar' ? 6 : 0;
         }
 
-        state.chart = new Chart(dom.scoreChart, {
-            type: chartType,
-            data: {
-                labels,
-                datasets: [dataset]
+        const nextOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 1120,
+                easing: 'easeOutQuart'
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: isCircularChart,
-                        position: 'bottom',
-                        labels: {
-                            color: '#94a3b8',
-                            boxWidth: 12,
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label(context) {
-                                const count = Number(context.raw) || 0;
-                                return ` ${count} học sinh`;
-                            }
-                        }
+            indexAxis: isHorizontalBar ? 'y' : 'x',
+            plugins: {
+                legend: {
+                    display: isCircularChart || isRadarChart,
+                    position: 'bottom',
+                    labels: {
+                        color: '#94a3b8',
+                        boxWidth: 12,
+                        usePointStyle: true,
+                        pointStyle: 'circle'
                     }
                 },
-                scales: isCircularChart
-                    ? {}
+                tooltip: {
+                    callbacks: {
+                        label(context) {
+                            const count = Number(context.raw) || 0;
+                            return ` ${count} học sinh`;
+                        }
+                    }
+                }
+            },
+            scales: isCircularChart
+                ? {}
+                : isRadarChart
+                    ? {
+                        r: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0,
+                                color: '#94a3b8',
+                                backdropColor: 'transparent'
+                            },
+                            grid: { color: 'rgba(148, 163, 184, 0.2)' },
+                            angleLines: { color: 'rgba(148, 163, 184, 0.14)' },
+                            pointLabels: { color: '#94a3b8' }
+                        }
+                    }
                     : {
                         x: {
                             ticks: { color: '#94a3b8' },
@@ -1672,13 +1719,37 @@
                             grid: { color: 'rgba(148, 163, 184, 0.1)' }
                         }
                     }
-            }
+        };
+
+        const canReuseChart = state.chart
+            && state.chart.config
+            && state.chart.config.type === chartType;
+
+        if (canReuseChart) {
+            state.chart.data.labels = labels;
+            state.chart.data.datasets = [dataset];
+            state.chart.options = nextOptions;
+            state.chart.update();
+            return;
+        }
+
+        if (state.chart) {
+            state.chart.destroy();
+        }
+
+        state.chart = new Chart(dom.scoreChart, {
+            type: chartType,
+            data: {
+                labels,
+                datasets: [dataset]
+            },
+            options: nextOptions
         });
     }
 
     function setAdvancedReportVisible(visible) {
-        if (!dom.reportSection) return;
-        dom.reportSection.classList.toggle('hidden', !visible);
+        if (!dom.modalReport) return;
+        dom.modalReport.classList.toggle('hidden', !visible);
         if (visible) {
             renderAdvancedReport();
         }
