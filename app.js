@@ -25,7 +25,12 @@
     };
 
     const ALLOWED_CHART_TYPES = new Set(['bar', 'line', 'doughnut', 'pie', 'polarArea', 'radar', 'barHorizontal']);
-    const ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS = new Set(['none', 'socau', 'made']);
+    const ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS = new Set(['none', 'socau', 'diem']);
+    const VI_COLLATOR = new Intl.Collator('vi', {
+        sensitivity: 'accent',
+        ignorePunctuation: true,
+        numeric: true
+    });
 
     const DEFAULT_CONFIG = {
         soCauToiDa: 40,
@@ -297,6 +302,11 @@
             localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
         }
 
+        if (state.ui.searchSingleFocusTarget === 'made') {
+            state.ui.searchSingleFocusTarget = 'diem';
+            localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
+        }
+
         if (!ALLOWED_SINGLE_SEARCH_FOCUS_TARGETS.has(state.ui.searchSingleFocusTarget)) {
             state.ui.searchSingleFocusTarget = 'none';
             localStorage.setItem(STORAGE_KEYS.ui, JSON.stringify(state.ui));
@@ -445,7 +455,7 @@
                     focusDirectInputForStudent(rows[0].id, 'socau');
                 }
 
-                if (state.ui.searchSingleFocusTarget === 'made') {
+                if (state.ui.searchSingleFocusTarget === 'diem') {
                     focusDirectInputForStudent(rows[0].id, 'diem');
                 }
             }
@@ -493,7 +503,7 @@
         if (col === 'diem') {
             return order * ((getStudentScore(a) || -1) - (getStudentScore(b) || -1));
         }
-        return order * String(a.name || '').localeCompare(String(b.name || ''), 'vi', { sensitivity: 'base' });
+        return order * compareVietnameseStudentName(a.name, b.name);
     }
 
     function handleTableInput(event) {
@@ -2248,6 +2258,48 @@
             .replace(/[đĐ]/g, 'd')
             .toLowerCase()
             .trim();
+    }
+
+    function compareVietnameseStudentName(nameA, nameB) {
+        const parsedA = splitVietnameseName(nameA);
+        const parsedB = splitVietnameseName(nameB);
+
+        // MoET list style: compare given name first, then middle name, then family name.
+        let diff = VI_COLLATOR.compare(parsedA.given, parsedB.given);
+        if (diff !== 0) return diff;
+
+        diff = VI_COLLATOR.compare(parsedA.middle, parsedB.middle);
+        if (diff !== 0) return diff;
+
+        diff = VI_COLLATOR.compare(parsedA.family, parsedB.family);
+        if (diff !== 0) return diff;
+
+        // Stable fallback when names collapse after trimming/normalizing.
+        return VI_COLLATOR.compare(parsedA.full, parsedB.full);
+    }
+
+    function splitVietnameseName(value) {
+        const full = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!full) {
+            return {
+                full: '',
+                given: '',
+                middle: '',
+                family: ''
+            };
+        }
+
+        const parts = full.split(' ');
+        const family = parts[0] || '';
+        const given = parts.length > 1 ? parts[parts.length - 1] : family;
+        const middle = parts.length > 2 ? parts.slice(1, -1).join(' ') : '';
+
+        return {
+            full,
+            given,
+            middle,
+            family
+        };
     }
 
     function loadJson(key, fallback) {
