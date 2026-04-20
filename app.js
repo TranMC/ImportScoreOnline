@@ -57,6 +57,12 @@
         undoStack: [],
         redoStack: [],
         maxHistory: 50,
+        cellEditSession: {
+            key: null,
+            beforeStudentsJson: null
+        },
+        recentUndoSnapshot: null,
+        recentUndoTimer: null,
         cloudBusy: false,
         chartRenderTimer: null,
         chartDrag: {
@@ -87,7 +93,6 @@
     function cacheDom() {
         dom.toastContainer = byId('toastContainer');
         dom.fileNameDisplay = byId('fileNameDisplay');
-        dom.fileBadge = byId('fileBadge');
 
         dom.hStatTotal = byId('hStatTotal');
         dom.hStatEntered = byId('hStatEntered');
@@ -268,6 +273,10 @@
         dom.tableBody.addEventListener('change', handleTableChange);
         dom.tableBody.addEventListener('keydown', handleTableKeydown);
         dom.tableBody.addEventListener('click', handleTableClick);
+        dom.tableBody.addEventListener('focusin', handleTableFocusIn);
+        dom.tableBody.addEventListener('focusout', handleTableFocusOut);
+
+        dom.recentFilesList.addEventListener('click', handleRecentFilesClick);
 
         bindImportModalEvents();
         bindExportModalEvents();
@@ -280,6 +289,8 @@
     function hydrateState() {
         const savedStudents = loadJson(STORAGE_KEYS.students, []);
         state.students = savedStudents.map(normalizeStudent);
+        state.recentFiles = normalizeRecentFiles(state.recentFiles);
+        localStorage.setItem(STORAGE_KEYS.recent, JSON.stringify(state.recentFiles));
 
         if (state.currentFileName) {
             dom.fileNameDisplay.textContent = state.currentFileName;
@@ -519,8 +530,6 @@
         const field = input.dataset.field;
         if (!field) return;
 
-        snapshotBeforeMutation();
-
         if (field === 'name') {
             student.name = input.value.trimStart();
         }
@@ -553,11 +562,43 @@
         updateUndoRedoState();
     }
 
+    function handleTableFocusIn(event) {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        if (!isEditableTableField(input.dataset.field)) return;
+
+        const row = input.closest('tr');
+        if (!row) return;
+
+        const student = findStudentByRow(row);
+        if (!student) return;
+
+        const nextKey = `${student.id}:${input.dataset.field}`;
+        if (state.cellEditSession.key === nextKey) return;
+
+        commitActiveCellEditSession();
+        state.cellEditSession = {
+            key: nextKey,
+            beforeStudentsJson: JSON.stringify(state.students)
+        };
+    }
+
+    function handleTableFocusOut(event) {
+        const input = event.target;
+        if (!(input instanceof HTMLInputElement)) return;
+        if (!isEditableTableField(input.dataset.field)) return;
+        commitActiveCellEditSession();
+    }
+
     function handleTableChange(event) {
         const input = event.target;
         if (!(input instanceof HTMLInputElement) && !(input instanceof HTMLSelectElement)) return;
 
         if (!input.dataset.field) return;
+
+        if (input instanceof HTMLInputElement && isEditableTableField(input.dataset.field)) {
+            commitActiveCellEditSession();
+        }
 
         renderChartIfVisible({ immediate: true });
     }
@@ -1422,6 +1463,11 @@
                 redoChange();
             }
 
+            if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                redoChange();
+            }
+
             if (!event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey && event.key.toLowerCase() === 'x') {
                 const activeElement = document.activeElement;
                 const isTypingContext = activeElement instanceof HTMLInputElement
@@ -1957,6 +2003,7 @@
     }
 
     function snapshotBeforeMutation() {
+        commitActiveCellEditSession();
         state.undoStack.push(JSON.stringify(state.students));
         if (state.undoStack.length > state.maxHistory) {
             state.undoStack.shift();
@@ -1965,6 +2012,7 @@
     }
 
     function undoChange() {
+        commitActiveCellEditSession();
         if (!state.undoStack.length) return;
         state.redoStack.push(JSON.stringify(state.students));
         const prev = state.undoStack.pop();
@@ -1976,6 +2024,7 @@
     }
 
     function redoChange() {
+        commitActiveCellEditSession();
         if (!state.redoStack.length) return;
         state.undoStack.push(JSON.stringify(state.students));
         const next = state.redoStack.pop();
@@ -1989,6 +2038,31 @@
     function updateUndoRedoState() {
         dom.btnUndo.disabled = state.undoStack.length === 0;
         dom.btnRedo.disabled = state.redoStack.length === 0;
+    }
+
+    function commitActiveCellEditSession() {
+        if (!state.cellEditSession.key || !state.cellEditSession.beforeStudentsJson) {
+            state.cellEditSession.key = null;
+            state.cellEditSession.beforeStudentsJson = null;
+            return;
+        }
+
+        const afterStudentsJson = JSON.stringify(state.students);
+        if (afterStudentsJson !== state.cellEditSession.beforeStudentsJson) {
+            state.undoStack.push(state.cellEditSession.beforeStudentsJson);
+            if (state.undoStack.length > state.maxHistory) {
+                state.undoStack.shift();
+            }
+            state.redoStack = [];
+            updateUndoRedoState();
+        }
+
+        state.cellEditSession.key = null;
+        state.cellEditSession.beforeStudentsJson = null;
+    }
+
+    function isEditableTableField(field) {
+        return field === 'name' || field === 'socau' || field === 'diem';
     }
 
     function persistStudents(render = true) {
@@ -2111,7 +2185,14 @@
     function addRecentFile(fileName) {
         if (!fileName) return;
         const timestamp = Date.now();
-        const item = { fileName, timestamp };
+        const current = state.recentFiles.find((x) => x.fileName === fileName);
+        const item = {
+            fileName,
+            timestamp,
+            studentCount: Number.isFinite(current && current.studentCount)
+                ? current.studentCount
+                : state.students.length
+        };
         state.recentFiles = [item]
             .concat(state.recentFiles.filter((x) => x.fileName !== fileName))
             .slice(0, 8);
@@ -2125,25 +2206,158 @@
             return;
         }
 
-        dom.recentFilesList.innerHTML = state.recentFiles
+        dom.recentFilesList.innerHTML = `
+            <div class="recent-files-toolbar">
+                <span class="recent-files-count">${state.recentFiles.length} file gần đây</span>
+                <button class="recent-files-clear" data-action="clear-recent" type="button">Xóa hết</button>
+            </div>
+        ` + state.recentFiles
             .map((item) => {
                 const date = new Date(item.timestamp);
+                const relativeTime = formatRelativeTime(item.timestamp);
+                const studentCountText = Number.isFinite(item.studentCount) && item.studentCount > 0
+                    ? `${item.studentCount} HS`
+                    : '';
                 return `
-                    <button class="recent-file-item" data-file-name="${escapeAttr(item.fileName)}">
-                        <span class="rf-name">${escapeHtml(item.fileName)}</span>
-                        <small class="rf-time">${date.toLocaleString('vi-VN')}</small>
-                    </button>
+                    <div class="recent-file-row">
+                        <button class="recent-file-item" data-action="open-recent" data-file-name="${escapeAttr(item.fileName)}" type="button">
+                            <span class="rf-name">${escapeHtml(item.fileName)}</span>
+                            <small class="rf-time" title="${escapeAttr(date.toLocaleString('vi-VN'))}">${escapeHtml(relativeTime)}</small>
+                            ${studentCountText ? `<small class="rf-count">${escapeHtml(studentCountText)}</small>` : ''}
+                        </button>
+                        <button class="recent-file-remove" data-action="remove-recent" data-file-name="${escapeAttr(item.fileName)}" title="Xóa khỏi danh sách" type="button">✕</button>
+                    </div>
                 `;
             })
             .join('');
+    }
 
-        dom.recentFilesList.querySelectorAll('.recent-file-item').forEach((button) => {
-            button.addEventListener('click', () => {
-                const fileName = button.getAttribute('data-file-name') || '';
-                setCurrentFileName(fileName);
-                showToast(`Đang làm việc với: ${fileName}`, 'success');
+    function handleRecentFilesClick(event) {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        const actionElement = target.closest('[data-action]');
+        if (!(actionElement instanceof HTMLElement)) return;
+
+        const action = actionElement.getAttribute('data-action') || '';
+        const fileName = (actionElement.getAttribute('data-file-name') || '').trim();
+
+        if (action === 'open-recent' && fileName) {
+            setCurrentFileName(fileName);
+            addRecentFile(fileName);
+            showToast(`Đang làm việc với: ${fileName}`, 'success');
+            return;
+        }
+
+        if (action === 'remove-recent' && fileName) {
+            removeRecentFile(fileName);
+            return;
+        }
+
+        if (action === 'clear-recent') {
+            confirmDialog('Xóa file gần đây', 'Bạn muốn xóa toàn bộ danh sách file gần đây?').then((ok) => {
+                if (!ok) return;
+                clearRecentFiles();
             });
+        }
+    }
+
+    function removeRecentFile(fileName) {
+        const before = state.recentFiles.slice();
+        state.recentFiles = state.recentFiles.filter((item) => item.fileName !== fileName);
+        if (state.recentFiles.length === before.length) return;
+        localStorage.setItem(STORAGE_KEYS.recent, JSON.stringify(state.recentFiles));
+        renderRecentFiles();
+        queueRecentFilesUndo(before, `Đã xóa khỏi file gần đây: ${fileName}`);
+    }
+
+    function clearRecentFiles() {
+        if (!state.recentFiles.length) return;
+        const before = state.recentFiles.slice();
+        state.recentFiles = [];
+        localStorage.setItem(STORAGE_KEYS.recent, JSON.stringify(state.recentFiles));
+        renderRecentFiles();
+        queueRecentFilesUndo(before, 'Đã xóa toàn bộ file gần đây');
+    }
+
+    function queueRecentFilesUndo(previousFiles, message) {
+        if (state.recentUndoTimer) {
+            clearTimeout(state.recentUndoTimer);
+            state.recentUndoTimer = null;
+        }
+
+        state.recentUndoSnapshot = previousFiles.slice();
+        state.recentUndoTimer = setTimeout(() => {
+            state.recentUndoSnapshot = null;
+            state.recentUndoTimer = null;
+        }, 5200);
+
+        showToast(message, 'info', {
+            actionLabel: 'Hoàn tác',
+            durationMs: 5200,
+            onAction: () => {
+                undoRecentFilesChange();
+            }
         });
+    }
+
+    function undoRecentFilesChange() {
+        if (!state.recentUndoSnapshot) return;
+        state.recentFiles = normalizeRecentFiles(state.recentUndoSnapshot);
+        localStorage.setItem(STORAGE_KEYS.recent, JSON.stringify(state.recentFiles));
+        renderRecentFiles();
+
+        if (state.recentUndoTimer) {
+            clearTimeout(state.recentUndoTimer);
+            state.recentUndoTimer = null;
+        }
+
+        state.recentUndoSnapshot = null;
+        showToast('Đã khôi phục danh sách file gần đây', 'success');
+    }
+
+    function normalizeRecentFiles(items) {
+        if (!Array.isArray(items)) return [];
+
+        const normalized = [];
+        const seen = new Set();
+
+        items.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            const fileName = String(item.fileName || '').trim();
+            if (!fileName || seen.has(fileName)) return;
+
+            const timestamp = Number.isFinite(item.timestamp)
+                ? item.timestamp
+                : Date.now();
+
+            const studentCount = Number.isFinite(item.studentCount)
+                ? Math.max(0, Math.floor(item.studentCount))
+                : null;
+
+            normalized.push({
+                fileName,
+                timestamp,
+                studentCount
+            });
+            seen.add(fileName);
+        });
+
+        return normalized
+            .sort((a, b) => b.timestamp - a.timestamp)
+            .slice(0, 8);
+    }
+
+    function formatRelativeTime(timestamp) {
+        const deltaMs = Date.now() - timestamp;
+        const minuteMs = 60 * 1000;
+        const hourMs = 60 * minuteMs;
+        const dayMs = 24 * hourMs;
+
+        if (deltaMs < minuteMs) return 'Vừa xong';
+        if (deltaMs < hourMs) return `${Math.floor(deltaMs / minuteMs)} phút trước`;
+        if (deltaMs < dayMs) return `${Math.floor(deltaMs / hourMs)} giờ trước`;
+        return `${Math.floor(deltaMs / dayMs)} ngày trước`;
     }
 
     function buildExportName() {
@@ -2202,10 +2416,13 @@
         modal.classList.add('hidden');
     }
 
-    function showToast(message, type) {
+    function showToast(message, type, options = {}) {
         if (!dom.toastContainer) return;
         const toast = document.createElement('div');
         const toastType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
+        const durationMs = Number.isFinite(options.durationMs)
+            ? Math.max(800, Math.round(options.durationMs))
+            : 2800;
         const iconMap = {
             success: '✓',
             error: '✕',
@@ -2218,11 +2435,30 @@
             <span class="toast-icon" aria-hidden="true">${iconMap[toastType]}</span>
             <span class="toast-msg">${escapeHtml(message)}</span>
         `;
+
+        if (options.actionLabel && typeof options.onAction === 'function') {
+            const actionButton = document.createElement('button');
+            actionButton.className = 'toast-action';
+            actionButton.type = 'button';
+            actionButton.textContent = String(options.actionLabel);
+            actionButton.addEventListener('click', () => {
+                options.onAction();
+                dismissToast();
+            });
+            toast.appendChild(actionButton);
+        }
+
         dom.toastContainer.appendChild(toast);
-        setTimeout(() => {
+
+        const removeTimer = setTimeout(() => {
+            dismissToast();
+        }, durationMs);
+
+        function dismissToast() {
+            clearTimeout(removeTimer);
             toast.classList.add('toast-out');
             setTimeout(() => toast.remove(), 220);
-        }, 2800);
+        }
     }
 
     function findStudentByRow(row) {

@@ -1,11 +1,10 @@
 name: Create config.js and Deploy to GitHub Pages
 
 on:
-  push:
+  workflow_run:
+    workflows: ["pages-build-deployment"]
+    types: [completed]
     branches: [ main, master ]
-    paths:
-      - 'ImportScoreOnline/**'
-      - 'ImportScoreOnline/.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +18,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event != 'workflow_run') }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -26,6 +26,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       
       - name: Create config.js from secret
         run: |

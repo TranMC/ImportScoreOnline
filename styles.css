@@ -426,10 +426,46 @@ body::before {
     gap: 4px;
 }
 
+.recent-files-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 2px 6px;
+}
+
+.recent-files-count {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.recent-files-clear {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.recent-files-clear:hover {
+    color: var(--danger);
+    border-color: rgba(239,68,68,0.4);
+    background: rgba(239,68,68,0.08);
+}
+
+.recent-file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .recent-file-item {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1;
     padding: 6px 8px;
     border-radius: var(--radius);
     cursor: pointer;
@@ -437,11 +473,59 @@ body::before {
     font-size: 12px;
     color: var(--text-secondary);
     overflow: hidden;
+    border: 1px solid transparent;
+    background: transparent;
+    font-family: var(--font);
+    text-align: left;
 }
 
-.recent-file-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+.recent-file-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border);
+}
 
-.recent-file-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-file-item .rf-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.recent-file-item .rf-time {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.recent-file-item .rf-count {
+    background: rgba(99,102,241,0.16);
+    color: var(--accent-light);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.recent-file-remove {
+    width: 24px;
+    height: 24px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--transition);
+}
+
+.recent-file-remove:hover {
+    color: var(--danger);
+    border-color: rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.08);
+}
 
 .empty-hint {
     font-size: 12px;
@@ -1925,6 +2009,25 @@ kbd {
     flex: 1;
     color: #e2e8f0;
     line-height: 1.42;
+}
+
+.toast-action {
+    border: 1px solid rgba(129,140,248,0.5);
+    background: rgba(129,140,248,0.16);
+    color: #c7d2fe;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.toast-action:hover {
+    background: rgba(129,140,248,0.25);
+    border-color: rgba(129,140,248,0.72);
+    color: #eef2ff;
 }
 
 /* ============================================
