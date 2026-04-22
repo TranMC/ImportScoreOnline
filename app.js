@@ -530,29 +530,13 @@
         const field = input.dataset.field;
         if (!field) return;
 
-        if (field === 'name') {
-            student.name = input.value.trimStart();
-        }
-        if (field === 'socau') {
-            student.socau = parseNullableNumber(input.value);
-            if (Number.isFinite(student.socau)) {
-                student.socau = clamp(student.socau, 0, state.config.soCauToiDa);
-                student.maDe = state.currentMaDE;
-            }
-        }
-        if (field === 'diem') {
-            student.diem = parseNullableNumber(input.value);
-            if (Number.isFinite(student.diem)) {
-                student.diem = clamp(student.diem, 0, 10);
-                student.maDe = state.currentMaDE;
-            }
+        if (field === 'socau' || field === 'diem') {
+            // Score/answer inputs are committed only on Enter in handleTableKeydown.
+            return;
         }
 
-        if (field === 'socau' || field === 'diem') {
-            const maDeCell = row.querySelector('.made-pill');
-            if (maDeCell) {
-                maDeCell.textContent = student.maDe || '—';
-            }
+        if (field === 'name') {
+            student.name = input.value.trimStart();
         }
 
         // Do not re-render table on each keystroke to avoid losing input focus while typing.
@@ -2331,16 +2315,36 @@
         dom.fileNameDisplay.textContent = fileName || 'Chưa có file';
     }
 
-    function addRecentFile(fileName) {
+    function buildStudentsSnapshotForRecent() {
+        return state.students.map((student) => ({
+            id: student.id,
+            name: student.name,
+            maDe: student.maDe,
+            socau: Number.isFinite(student.socau) ? student.socau : null,
+            diem: Number.isFinite(student.diem) ? student.diem : null
+        }));
+    }
+
+    function addRecentFile(fileName, options = {}) {
         if (!fileName) return;
         const timestamp = Date.now();
         const current = state.recentFiles.find((x) => x.fileName === fileName);
+
+        const keepExistingSnapshot = !!options.keepExistingSnapshot;
+        const nextSnapshot = keepExistingSnapshot && current && Array.isArray(current.studentsSnapshot)
+            ? current.studentsSnapshot
+            : buildStudentsSnapshotForRecent();
+
+        const nextCurrentMaDE = keepExistingSnapshot && current
+            ? String(current.currentMaDE || '').trim()
+            : String(state.currentMaDE || '').trim();
+
         const item = {
             fileName,
             timestamp,
-            studentCount: Number.isFinite(current && current.studentCount)
-                ? current.studentCount
-                : state.students.length
+            studentCount: state.students.length,
+            currentMaDE: nextCurrentMaDE,
+            studentsSnapshot: nextSnapshot
         };
         state.recentFiles = [item]
             .concat(state.recentFiles.filter((x) => x.fileName !== fileName))
@@ -2392,9 +2396,29 @@
         const fileName = (actionElement.getAttribute('data-file-name') || '').trim();
 
         if (action === 'open-recent' && fileName) {
+            const recentItem = state.recentFiles.find((item) => item.fileName === fileName);
+            if (!recentItem || !Array.isArray(recentItem.studentsSnapshot)) {
+                setCurrentFileName(fileName);
+                addRecentFile(fileName, { keepExistingSnapshot: true });
+                showToast(`Không tìm thấy dữ liệu đã lưu cho: ${fileName}`, 'warning');
+                return;
+            }
+
+            snapshotBeforeMutation();
+            state.students = recentItem.studentsSnapshot.map(normalizeStudent);
+            state.currentMaDE = String(recentItem.currentMaDE || '').trim();
+            localStorage.setItem(STORAGE_KEYS.currentMaDE, state.currentMaDE);
+            rebuildMaDEOptions();
+            if (dom.currentMaDESelect) {
+                dom.currentMaDESelect.value = state.currentMaDE;
+            }
+
+            persistStudents(false);
+            renderTableAndStats();
+            updateUndoRedoState();
             setCurrentFileName(fileName);
-            addRecentFile(fileName);
-            showToast(`Đang làm việc với: ${fileName}`, 'success');
+            addRecentFile(fileName, { keepExistingSnapshot: true });
+            showToast(`Đã mở lại dữ liệu từ: ${fileName}`, 'success');
             return;
         }
 
@@ -2484,10 +2508,17 @@
                 ? Math.max(0, Math.floor(item.studentCount))
                 : null;
 
+            const currentMaDE = String(item.currentMaDE || '').trim();
+            const studentsSnapshot = Array.isArray(item.studentsSnapshot)
+                ? item.studentsSnapshot.map(normalizeStudent)
+                : null;
+
             normalized.push({
                 fileName,
                 timestamp,
-                studentCount
+                studentCount,
+                currentMaDE,
+                studentsSnapshot
             });
             seen.add(fileName);
         });
