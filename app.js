@@ -1069,6 +1069,8 @@
         const fileBase = buildExportName();
         const wasHidden = dom.modalReport.classList.contains('hidden');
         const pdfOrientation = getPdfOrientation();
+        const scoreTableElement = dom.reportPrintable.querySelector('.report-score-table');
+        const scoreTableBlockElement = dom.reportPrintable.querySelector('.report-score-table-block');
         let exportModeApplied = false;
         let exportedWithJsPdf = false;
 
@@ -1083,70 +1085,30 @@
             renderAdvancedReport();
             await waitForNextPaint();
 
-            const canvas = await window.html2canvas(dom.reportPrintable, {
+            if (!scoreTableElement || !scoreTableBlockElement) {
+                throw new Error('Không tìm thấy bảng điểm chi tiết để xuất PDF.');
+            }
+
+            const overviewCanvas = await captureReportOverviewCanvas(scoreTableBlockElement);
+            const detailTableCanvas = await window.html2canvas(scoreTableElement, {
                 scale: 2,
                 backgroundColor: '#0b122d',
                 useCORS: true,
                 logging: false
             });
+            const detailRowRangesPx = getTableRowRangesForCanvas(scoreTableElement, detailTableCanvas.width);
 
             const docOrientation = pdfOrientation === 'portrait' ? 'p' : 'l';
             const doc = new window.jspdf.jsPDF({ orientation: docOrientation, unit: 'pt', format: 'a4' });
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            const margin = 16;
-            const targetWidth = pageWidth - margin * 2;
-            const scaleRatio = targetWidth / canvas.width;
-            const sliceHeightPx = Math.max(1, Math.floor((pageHeight - margin * 2) / scaleRatio));
+            const margin = 8;
 
-            let renderedY = 0;
-            let pageIndex = 0;
+            addCanvasAsSinglePage(doc, overviewCanvas, margin);
 
-            while (renderedY < canvas.height) {
-                const currentSliceHeight = Math.min(sliceHeightPx, canvas.height - renderedY);
-                const pageCanvas = document.createElement('canvas');
-                pageCanvas.width = canvas.width;
-                pageCanvas.height = currentSliceHeight;
+            const detailHeaderHeightPx = getTableHeaderHeightForCanvas(scoreTableElement, detailTableCanvas.width);
+            appendTableCanvasPages(doc, detailTableCanvas, detailHeaderHeightPx, detailRowRangesPx, margin);
 
-                const pageContext = pageCanvas.getContext('2d');
-                if (!pageContext) break;
-
-                pageContext.drawImage(
-                    canvas,
-                    0,
-                    renderedY,
-                    canvas.width,
-                    currentSliceHeight,
-                    0,
-                    0,
-                    canvas.width,
-                    currentSliceHeight
-                );
-
-                if (pageIndex > 0) {
-                    doc.addPage();
-                }
-
-                const imageHeight = currentSliceHeight * scaleRatio;
-                doc.addImage(
-                    pageCanvas.toDataURL('image/png'),
-                    'PNG',
-                    margin,
-                    margin,
-                    targetWidth,
-                    imageHeight,
-                    undefined,
-                    'FAST'
-                );
-
-                renderedY += currentSliceHeight;
-                pageIndex += 1;
-            }
-
-            if (pageIndex > 0) {
-                doc.save(`${fileBase}.pdf`);
-                exportedWithJsPdf = true;
-            }
+            doc.save(`${fileBase}.pdf`);
+            exportedWithJsPdf = true;
         } catch (error) {
             console.error('PDF canvas export failed, fallback to print window:', error);
         } finally {
@@ -1175,6 +1137,193 @@
         addRecentFile(`${fileBase}.pdf`);
         closeModal(dom.modalExport);
         showToast('Đã xuất PDF thành công', 'success');
+    }
+
+    async function captureReportOverviewCanvas(scoreTableBlockElement) {
+        const previousDisplay = scoreTableBlockElement.style.display;
+        scoreTableBlockElement.style.display = 'none';
+
+        try {
+            await waitForNextPaint();
+            return await window.html2canvas(dom.reportPrintable, {
+                scale: 2,
+                backgroundColor: '#0b122d',
+                useCORS: true,
+                logging: false
+            });
+        } finally {
+            scoreTableBlockElement.style.display = previousDisplay;
+            await waitForNextPaint();
+        }
+    }
+
+    function addCanvasAsSinglePage(doc, canvas, margin) {
+        paintPdfPageBackground(doc);
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const maxWidth = pageWidth - margin * 2;
+        const maxHeight = pageHeight - margin * 2;
+        const ratio = Math.min(maxWidth / canvas.width, maxHeight / canvas.height);
+        const drawWidth = canvas.width * ratio;
+        const drawHeight = canvas.height * ratio;
+        const offsetX = margin + (maxWidth - drawWidth) / 2;
+        const offsetY = margin;
+
+        doc.addImage(
+            canvas.toDataURL('image/png'),
+            'PNG',
+            offsetX,
+            offsetY,
+            drawWidth,
+            drawHeight,
+            undefined,
+            'FAST'
+        );
+    }
+
+    function getTableHeaderHeightForCanvas(tableElement, canvasWidth) {
+        const theadElement = tableElement.querySelector('thead');
+        const tableRect = tableElement.getBoundingClientRect();
+        const theadRect = theadElement ? theadElement.getBoundingClientRect() : null;
+
+        if (!tableRect.width || !theadRect || !theadRect.height) {
+            return Math.max(60, Math.round(canvasWidth * 0.08));
+        }
+
+        const scale = canvasWidth / tableRect.width;
+        return Math.max(1, Math.round(theadRect.height * scale));
+    }
+
+    function getTableRowRangesForCanvas(tableElement, canvasWidth) {
+        const tbodyElement = tableElement.querySelector('tbody');
+        const rows = tbodyElement ? Array.from(tbodyElement.querySelectorAll('tr')) : [];
+        const tableRect = tableElement.getBoundingClientRect();
+
+        if (!tableRect.width || !rows.length) return [];
+
+        const scale = canvasWidth / tableRect.width;
+
+        return rows
+            .map((row) => {
+                const rowRect = row.getBoundingClientRect();
+                const start = Math.max(0, Math.round((rowRect.top - tableRect.top) * scale));
+                const end = Math.max(start + 1, Math.round((rowRect.bottom - tableRect.top) * scale));
+                return { start, end };
+            })
+            .filter((range) => range.end > range.start)
+            .sort((a, b) => a.start - b.start);
+    }
+
+    function appendTableCanvasPages(doc, tableCanvas, headerHeightPx, rowRangesPx, margin) {
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const targetWidth = pageWidth - margin * 2;
+        const scaleRatio = targetWidth / tableCanvas.width;
+        const maxPageContentHeight = pageHeight - margin * 2;
+
+        const safeHeaderHeightPx = Math.min(Math.max(1, headerHeightPx), tableCanvas.height);
+        const headerHeightPt = safeHeaderHeightPx * scaleRatio;
+        const availableBodyHeightPt = Math.max(24, maxPageContentHeight - headerHeightPt);
+        const maxBodyHeightPx = Math.max(1, Math.floor(availableBodyHeightPt / scaleRatio));
+
+        const normalizedRanges = (Array.isArray(rowRangesPx) ? rowRangesPx : [])
+            .filter((range) => range && Number.isFinite(range.start) && Number.isFinite(range.end) && range.end > range.start)
+            .map((range) => ({
+                start: Math.max(safeHeaderHeightPx, Math.min(tableCanvas.height, Math.round(range.start))),
+                end: Math.max(safeHeaderHeightPx, Math.min(tableCanvas.height, Math.round(range.end)))
+            }))
+            .filter((range) => range.end > range.start);
+
+        if (!normalizedRanges.length) {
+            appendTableCanvasPagesByFixedSlice(doc, tableCanvas, safeHeaderHeightPx, maxBodyHeightPx, targetWidth, scaleRatio, margin);
+            return;
+        }
+
+        let rowCursor = 0;
+
+        while (rowCursor < normalizedRanges.length) {
+            const firstRange = normalizedRanges[rowCursor];
+            let bodyStartY = firstRange.start;
+            let bodyEndY = firstRange.end;
+            let rowsInPage = 1;
+
+            while (rowCursor + rowsInPage < normalizedRanges.length) {
+                const candidate = normalizedRanges[rowCursor + rowsInPage];
+                if ((candidate.end - bodyStartY) > maxBodyHeightPx) break;
+                bodyEndY = candidate.end;
+                rowsInPage += 1;
+            }
+
+            renderTableSlicePage(doc, tableCanvas, safeHeaderHeightPx, bodyStartY, bodyEndY, targetWidth, scaleRatio, margin);
+
+            rowCursor += rowsInPage;
+        }
+    }
+
+    function appendTableCanvasPagesByFixedSlice(doc, tableCanvas, headerHeightPx, maxBodyHeightPx, targetWidth, scaleRatio, margin) {
+        let bodyStartY = headerHeightPx;
+
+        while (bodyStartY < tableCanvas.height) {
+            const bodyEndY = Math.min(tableCanvas.height, bodyStartY + maxBodyHeightPx);
+            renderTableSlicePage(doc, tableCanvas, headerHeightPx, bodyStartY, bodyEndY, targetWidth, scaleRatio, margin);
+            bodyStartY = bodyEndY;
+        }
+    }
+
+    function renderTableSlicePage(doc, tableCanvas, headerHeightPx, bodyStartY, bodyEndY, targetWidth, scaleRatio, margin) {
+        const currentBodyHeightPx = Math.max(1, bodyEndY - bodyStartY);
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = tableCanvas.width;
+        pageCanvas.height = headerHeightPx + currentBodyHeightPx;
+
+        const pageContext = pageCanvas.getContext('2d');
+        if (!pageContext) return;
+
+        pageContext.drawImage(
+            tableCanvas,
+            0,
+            0,
+            tableCanvas.width,
+            headerHeightPx,
+            0,
+            0,
+            tableCanvas.width,
+            headerHeightPx
+        );
+
+        pageContext.drawImage(
+            tableCanvas,
+            0,
+            bodyStartY,
+            tableCanvas.width,
+            currentBodyHeightPx,
+            0,
+            headerHeightPx,
+            tableCanvas.width,
+            currentBodyHeightPx
+        );
+
+        doc.addPage();
+        paintPdfPageBackground(doc);
+        const imageHeight = pageCanvas.height * scaleRatio;
+        doc.addImage(
+            pageCanvas.toDataURL('image/png'),
+            'PNG',
+            margin,
+            margin,
+            targetWidth,
+            imageHeight,
+            undefined,
+            'FAST'
+        );
+    }
+
+    function paintPdfPageBackground(doc) {
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        doc.setFillColor(11, 18, 45);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
     }
 
     function exportPdfViaPrintWindow(fileBase, orientation) {
