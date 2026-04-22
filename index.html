@@ -15,7 +15,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=20260417-2">
+    <link rel="stylesheet" href="styles.css?v=20260422-1">
 </head>
 <body>
 
@@ -78,12 +78,15 @@
         <button class="btn btn-ghost btn-icon" id="btnRedo" title="Làm lại" disabled>
             <span class="btn-svg">↪ Redo</span>
         </button>
-        <div class="header-made" title="Mã đề sẽ được gán tự động khi nhập số câu hoặc điểm">
+        <div class="header-made" title="Mã đề sẽ được gán khi xác nhận nhập Số câu hoặc Điểm bằng Enter">
             <span class="header-made-label">Mã đề</span>
             <select id="currentMaDESelect" class="header-made-select">
                 <option value="">— Không có —</option>
             </select>
         </div>
+        <button class="btn btn-danger" id="btnResetStudents">
+            <span>🧹</span> Bảng mới
+        </button>
         <button class="btn btn-secondary" id="btnImport">
             <span>📂</span> Import Excel
         </button>
@@ -524,40 +527,28 @@
                 <label>Lớp</label>
                 <input type="text" id="expClassName" class="cfg-input" placeholder="VD: 6A1">
             </div>
-            <div class="form-group">
-                <label>Khổ PDF</label>
-                <select id="expPdfOrientation" class="cfg-input">
-                    <option value="landscape">A4 ngang (Landscape)</option>
-                    <option value="portrait">A4 dọc (Portrait)</option>
-                </select>
-            </div>
-
             <div class="divider"></div>
 
-            <label class="toggle-row" id="toggleCloudRow">
-                <input type="checkbox" id="cbSaveToCloud" class="toggle-cb">
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-                <div class="toggle-info">
-                    <strong>☁️ Cũng lưu lên database CloudScore</strong>
-                    <small>Bản ghi xuất hiện trong CloudScore & trang tra cứu</small>
+            <div class="export-cloud-panel">
+                <div class="export-cloud-text">
+                    <strong>☁️ Lưu database CloudScore</strong>
+                    <small>Lưu độc lập, không cần xuất Excel/PDF</small>
                 </div>
-            </label>
-
-            <div class="cloud-sub hidden" id="cloudSubOptions">
-                <label class="toggle-row">
+                <label class="toggle-row export-cloud-toggle">
                     <input type="checkbox" id="cbIsPublic" class="toggle-cb">
                     <div class="toggle-track"><div class="toggle-thumb"></div></div>
                     <div class="toggle-info">
-                        <strong>🌐 Công khai</strong>
-                        <small>Học sinh có thể tra cứu điểm trên CloudCheckScore</small>
+                        <strong>🌐 Công khai khi lưu</strong>
+                        <small>Bật nếu muốn học sinh tra cứu bản ghi trên CloudCheckScore</small>
                     </div>
                 </label>
+                <button class="btn btn-primary btn-block" id="btnSaveCloud">Lưu database ngay</button>
             </div>
         </div>
-        <div class="modal-ftr">
+        <div class="modal-ftr modal-ftr-export">
             <button class="btn btn-success" id="btnExportExcel">📊 Xuất Excel</button>
             <button class="btn btn-warning" id="btnExportPdf">📄 Xuất PDF đẹp</button>
-            <button class="btn btn-secondary" data-close="modalExport">Hủy</button>
+            <button class="btn btn-ghost" data-close="modalExport">Hủy</button>
         </div>
     </div>
 </div>
@@ -612,7 +603,7 @@
     </div>
 </div>
 
-<script src="config.js?v=20260417-2"></script>
-<script src="app.js?v=20260417-2"></script>
+<script src="config.js?v=20260422-1"></script>
+<script src="app.js?v=20260422-1"></script>
 </body>
 </html>

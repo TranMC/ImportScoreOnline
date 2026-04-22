@@ -1652,6 +1652,42 @@ kbd {
     margin: 2px 0;
 }
 
+.export-cloud-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(99, 102, 241, 0.02));
+}
+
+.export-cloud-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.export-cloud-text strong {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.export-cloud-text small {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.export-cloud-toggle {
+    margin-top: 2px;
+    background: rgba(15, 23, 55, 0.45);
+}
+
+.modal-ftr-export {
+    justify-content: flex-end;
+    gap: 10px;
+}
+
 /* Import modal specifics */
 .drop-zone {
     border: 2px dashed var(--border-accent);
@@ -2098,6 +2134,15 @@ select {
 
     .report-block-grid {
         grid-template-columns: 1fr;
+    }
+
+    .modal-ftr-export {
+        flex-wrap: wrap;
+    }
+
+    .modal-ftr-export .btn {
+        flex: 1 1 auto;
+        justify-content: center;
     }
 }
 

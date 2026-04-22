@@ -180,9 +180,7 @@
         dom.expAvgScore = byId('expAvgScore');
         dom.expRecordName = byId('expRecordName');
         dom.expClassName = byId('expClassName');
-        dom.expPdfOrientation = byId('expPdfOrientation');
-        dom.cbSaveToCloud = byId('cbSaveToCloud');
-        dom.cloudSubOptions = byId('cloudSubOptions');
+        dom.btnSaveCloud = byId('btnSaveCloud');
         dom.cbIsPublic = byId('cbIsPublic');
 
         dom.modalStudent = byId('modalStudent');
@@ -218,6 +216,7 @@
         });
         byId('btnToggleMaDE').addEventListener('click', toggleMaDE);
         byId('btnAddStudent').addEventListener('click', () => openStudentModal(-1));
+        byId('btnResetStudents').addEventListener('click', clearAllStudents);
 
         dom.searchInput.addEventListener('input', onSearchInput);
         dom.btnClearSearch.addEventListener('click', clearSearch);
@@ -971,9 +970,8 @@
         byId('btnExportPdf').addEventListener('click', async () => {
             await exportPdf();
         });
-
-        dom.cbSaveToCloud.addEventListener('change', () => {
-            dom.cloudSubOptions.classList.toggle('hidden', !dom.cbSaveToCloud.checked);
+        byId('btnSaveCloud').addEventListener('click', async () => {
+            await saveCloudFromModal();
         });
     }
 
@@ -989,10 +987,6 @@
 
         if (!dom.expRecordName.value) {
             dom.expRecordName.value = state.currentFileName ? stripExtension(state.currentFileName) : '';
-        }
-
-        if (dom.expPdfOrientation && !dom.expPdfOrientation.value) {
-            dom.expPdfOrientation.value = 'landscape';
         }
 
         renderAdvancedReport();
@@ -1026,9 +1020,6 @@
         XLSX.utils.book_append_sheet(wb, ws, 'Bang diem');
         XLSX.writeFile(wb, `${fileBase}.xlsx`);
 
-        const cloudOk = await maybeSaveToCloud(fileBase);
-        if (cloudOk === false) return;
-
         addRecentFile(`${fileBase}.xlsx`);
         closeModal(dom.modalExport);
         showToast('Đã xuất Excel thành công', 'success');
@@ -1052,7 +1043,7 @@
 
         const fileBase = buildExportName();
         const wasHidden = dom.modalReport.classList.contains('hidden');
-        const pdfOrientation = getPdfOrientation();
+        const pdfOrientation = 'landscape';
         const scoreTableElement = dom.reportPrintable.querySelector('.report-score-table');
         const scoreTableBlockElement = dom.reportPrintable.querySelector('.report-score-table-block');
         let exportModeApplied = false;
@@ -1114,9 +1105,6 @@
 
             showToast('Đã mở cửa sổ in. Chọn Save as PDF để lưu đúng font tiếng Việt.', 'warning');
         }
-
-        const cloudOk = await maybeSaveToCloud(fileBase);
-        if (cloudOk === false) return;
 
         addRecentFile(`${fileBase}.pdf`);
         closeModal(dom.modalExport);
@@ -1437,9 +1425,7 @@
         return true;
     }
 
-    async function maybeSaveToCloud(fileBase) {
-        if (!dom.cbSaveToCloud.checked) return true;
-
+    async function saveCloudRecord(fileBase) {
         if (!state.proxyUrl.trim()) {
             showToast('Chưa cấu hình Proxy URL.', 'error');
             return false;
@@ -1484,6 +1470,20 @@
         } finally {
             state.cloudBusy = false;
         }
+    }
+
+    async function saveCloudFromModal() {
+        if (!state.students.length) {
+            showToast('Chưa có dữ liệu để lưu database.', 'error');
+            return;
+        }
+
+        const fileBase = buildExportName();
+        const ok = await saveCloudRecord(fileBase);
+        if (!ok) return;
+
+        addRecentFile(`${fileBase} (cloud)`);
+        closeModal(dom.modalExport);
     }
 
     function bindStudentModalEvents() {
@@ -2127,6 +2127,33 @@
         renderTableAndStats();
     }
 
+    function clearAllStudents() {
+        if (!state.students.length) {
+            showToast('Danh sách đã trống.', 'info');
+            return;
+        }
+
+        confirmDialog('Tạo bảng nhập liệu mới', 'Xóa toàn bộ học sinh hiện tại và làm mới bảng?').then((ok) => {
+            if (!ok) return;
+
+            snapshotBeforeMutation();
+            state.students = [];
+            state.selectedStudentId = null;
+            state.selectedIndex = -1;
+            persistStudents(false);
+            setCurrentFileName('');
+            state.currentMaDE = '';
+            localStorage.setItem(STORAGE_KEYS.currentMaDE, state.currentMaDE);
+            rebuildMaDEOptions();
+            if (dom.currentMaDESelect) {
+                dom.currentMaDESelect.value = '';
+            }
+            renderTableAndStats();
+            updateUndoRedoState();
+            showToast('Đã làm mới bảng nhập liệu.', 'success');
+        });
+    }
+
     function waitForNextPaint() {
         return new Promise((resolve) => {
             requestAnimationFrame(() => {
@@ -2284,11 +2311,6 @@
         if (score >= 6.5) return 'badge-good';
         if (score >= 5) return 'badge-average';
         return 'badge-weak';
-    }
-
-    function getPdfOrientation() {
-        if (!dom.expPdfOrientation) return 'landscape';
-        return dom.expPdfOrientation.value === 'portrait' ? 'portrait' : 'landscape';
     }
 
     function getRankMeta(score) {
