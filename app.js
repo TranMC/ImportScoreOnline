@@ -64,6 +64,7 @@
         recentUndoSnapshot: null,
         recentUndoTimer: null,
         cloudBusy: false,
+        cloudRecordId: null,
         chartRenderTimer: null,
         chartDrag: {
             active: false,
@@ -199,10 +200,19 @@
         dom.btnUndo = byId('btnUndo');
         dom.btnRedo = byId('btnRedo');
         dom.currentMaDESelect = byId('currentMaDESelect');
+
+        dom.btnImportCloud = byId('btnImportCloud');
+        dom.modalImportCloud = byId('modalImportCloud');
+        dom.cloudRecordsLoading = byId('cloudRecordsLoading');
+        dom.cloudRecordsError = byId('cloudRecordsError');
+        dom.cloudRecordsTableWrap = byId('cloudRecordsTableWrap');
+        dom.cloudRecordsBody = byId('cloudRecordsBody');
+        dom.cbClearBeforeCloudImport = byId('cbClearBeforeCloudImport');
     }
 
     function bindEvents() {
         byId('btnImport').addEventListener('click', () => openModal(dom.modalImport));
+        byId('btnImportCloud').addEventListener('click', openCloudImportModal);
         byId('btnExport').addEventListener('click', openExportModal);
         byId('btnToggleSidebar').addEventListener('click', toggleSidebar);
         byId('btnSaveConfig').addEventListener('click', saveExamConfig);
@@ -923,6 +933,7 @@
         if (clearBeforeImport) {
             state.students = cleanedImportRows;
             added = cleanedImportRows.length;
+            state.cloudRecordId = null;
         } else {
             const existingKey = new Set(state.students.map((x) => `${normalizeText(x.name)}|${normalizeText(x.maDe || '')}`));
 
@@ -1436,7 +1447,8 @@
 
         try {
             const payload = {
-                id: `record_${Date.now()}`,
+                method: 'UPSERT',
+                id: state.cloudRecordId || '',
                 recordName: dom.expRecordName.value.trim() || fileBase,
                 recordClass: dom.expClassName.value.trim(),
                 lastModified: new Date().toISOString(),
@@ -1459,6 +1471,11 @@
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data && data.record && data.record.id) {
+                state.cloudRecordId = data.record.id;
             }
 
             showToast('Đã lưu bản ghi lên cloud', 'success');
@@ -2140,6 +2157,7 @@
             state.students = [];
             state.selectedStudentId = null;
             state.selectedIndex = -1;
+            state.cloudRecordId = null;
             persistStudents(false);
             setCurrentFileName('');
             state.currentMaDE = '';
@@ -2778,4 +2796,133 @@
     function escapeAttr(value) {
         return escapeHtml(value);
     }
+
+    async function openCloudImportModal() {
+        if (!state.proxyUrl || !state.proxyUrl.trim()) {
+            showToast('Chưa cấu hình Proxy URL. Vui lòng cài đặt trong Cài đặt Database.', 'error');
+            return;
+        }
+        
+        openModal(dom.modalImportCloud);
+        dom.cloudRecordsLoading.classList.remove('hidden');
+        dom.cloudRecordsError.classList.add('hidden');
+        dom.cloudRecordsTableWrap.classList.add('hidden');
+        dom.cloudRecordsBody.innerHTML = '';
+        
+        try {
+            const response = await fetch(`${state.proxyUrl.replace(/\/$/, '')}/records`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            const records = data.records || [];
+            
+            if (records.length === 0) {
+                dom.cloudRecordsError.textContent = 'Không có bản ghi nào trên CloudScore.';
+                dom.cloudRecordsError.classList.remove('hidden');
+                dom.cloudRecordsLoading.classList.add('hidden');
+                return;
+            }
+            
+            records.sort((a, b) => new Date(b.lastModified) < new Date(a.lastModified) ? 1 : -1);
+            
+            dom.cloudRecordsBody.innerHTML = records.map(record => {
+                const dateStr = new Date(record.lastModified).toLocaleString('vi-VN');
+                const studentCount = Array.isArray(record.students) ? record.students.length : 0;
+                return `
+                    <tr>
+                        <td style="font-weight: 500;">${escapeHtml(record.recordName || '—')}</td>
+                        <td>${escapeHtml(record.recordClass || '—')}</td>
+                        <td>${studentCount} HS</td>
+                        <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="window.appDoImportCloud('${escapeAttr(record.id)}')">📥 Lấy</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            dom.cloudRecordsTableWrap.classList.remove('hidden');
+        } catch (err) {
+            console.error(err);
+            dom.cloudRecordsError.textContent = 'Lỗi kết nối CloudScore. Vui lòng kiểm tra lại Proxy URL.';
+            dom.cloudRecordsError.classList.remove('hidden');
+        } finally {
+            dom.cloudRecordsLoading.classList.add('hidden');
+        }
+    }
+
+    window.appDoImportCloud = async function(recordId) {
+        if (state.cloudBusy) return;
+        state.cloudBusy = true;
+        
+        try {
+            showToast('Đang lấy dữ liệu từ Cloud...', 'info');
+            
+            const response = await fetch(`${state.proxyUrl.replace(/\/$/, '')}/records?id=${encodeURIComponent(recordId)}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            const record = data.record;
+            if (!record || !record.students) throw new Error('Dữ liệu không hợp lệ');
+            
+            const importRows = [];
+            record.students.forEach(s => {
+                const soCauRaw = s.scores ? s.scores['Số câu đúng'] : '';
+                const diemRaw = s.scores ? s.scores['Điểm'] : '';
+                
+                importRows.push(normalizeStudent({
+                    id: makeId(),
+                    name: String(s.name || '').trim(),
+                    maDe: '',
+                    socau: parseNullableNumber(soCauRaw),
+                    diem: parseNullableNumber(diemRaw)
+                }));
+            });
+            
+            if (importRows.length === 0) {
+                showToast('Bản ghi này không có học sinh nào.', 'error');
+                return;
+            }
+            
+            snapshotBeforeMutation();
+            const clearBeforeImport = !!(dom.cbClearBeforeCloudImport && dom.cbClearBeforeCloudImport.checked);
+            const cleanedImportRows = dedupeImportRows(importRows);
+            let added = 0;
+            
+            if (clearBeforeImport) {
+                state.students = cleanedImportRows;
+                added = cleanedImportRows.length;
+                state.cloudRecordId = recordId;
+            } else {
+                const existingKey = new Set(state.students.map((x) => `${normalizeText(x.name)}|${normalizeText(x.maDe || '')}`));
+                
+                cleanedImportRows.forEach((row) => {
+                    const key = `${normalizeText(row.name)}|${normalizeText(row.maDe || '')}`;
+                    if (!key) return;
+                    if (existingKey.has(key)) return;
+                    existingKey.add(key);
+                    state.students.push(row);
+                    added += 1;
+                });
+            }
+            
+            persistStudents();
+            const fileName = record.recordName || `Cloud_${recordId}`;
+            setCurrentFileName(fileName);
+            addRecentFile(`${fileName} (từ Cloud)`);
+            
+            closeModal(dom.modalImportCloud);
+            renderTableAndStats();
+            updateUndoRedoState();
+            
+            const modeText = clearBeforeImport ? ' (đã xóa dữ liệu cũ)' : '';
+            showToast(`Đã import ${added} học sinh từ Cloud${modeText}`, 'success');
+            
+        } catch (err) {
+            console.error(err);
+            showToast('Lỗi khi lấy chi tiết bản ghi từ Cloud.', 'error');
+        } finally {
+            state.cloudBusy = false;
+        }
+    };
 })();
