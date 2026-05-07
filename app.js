@@ -2856,14 +2856,33 @@
         state.cloudBusy = true;
         
         try {
+            if (!state.proxyUrl) {
+                throw new Error('Chưa cấu hình Proxy URL. Vui lòng kiểm tra config.js');
+            }
+            
             showToast('Đang lấy dữ liệu từ Cloud...', 'info');
             
-            const response = await fetch(`${state.proxyUrl.replace(/\/$/, '')}/records?id=${encodeURIComponent(recordId)}`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const url = `${state.proxyUrl.replace(/\/$/, '')}/records?id=${encodeURIComponent(recordId)}`;
+            // console.log('Fetching from:', url);
+            
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             
             const data = await response.json();
+            console.log('Response data:', data);
+            
+            if (data.error) {
+                throw new Error(`API Error: ${data.error}`);
+            }
+            
             const record = data.record;
-            if (!record || !record.students) throw new Error('Dữ liệu không hợp lệ');
+            if (!record) {
+                throw new Error('Không tìm thấy bản ghi (record). Kiểm tra lại ID bản ghi.');
+            }
+            
+            if (!record.students || !Array.isArray(record.students)) {
+                throw new Error('Bản ghi không chứa danh sách học sinh hợp lệ.');
+            }
             
             const importRows = [];
             record.students.forEach(s => {
@@ -2919,8 +2938,9 @@
             showToast(`Đã import ${added} học sinh từ Cloud${modeText}`, 'success');
             
         } catch (err) {
-            console.error(err);
-            showToast('Lỗi khi lấy chi tiết bản ghi từ Cloud.', 'error');
+            console.error('Import error:', err);
+            const errMsg = err.message || 'Lỗi không xác định';
+            showToast(`Lỗi: ${errMsg}`, 'error');
         } finally {
             state.cloudBusy = false;
         }
